@@ -1,0 +1,111 @@
+
+*{box-sizing:border-box}
+body{margin:0;background:#08090e;color:#fff;font-family:system-ui,sans-serif}
+#game{max-width:900px;margin:auto;padding:12px}
+h1{text-align:center;font-size:20px;color:#e8b6c1;letter-spacing:2px}
+#screen{position:relative;width:100%;aspect-ratio:16/9;background:#171d28;border:2px solid #743244;overflow:hidden}
+#field{position:absolute;inset:0;background:linear-gradient(145deg,#202b37,#10151e)}
+#field:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 49px,#ffffff09 50px),repeating-linear-gradient(90deg,transparent 0 49px,#ffffff09 50px)}
+.actor{position:absolute;width:32px;height:40px;border-radius:12px 12px 5px 5px;display:flex;align-items:center;justify-content:center;font-size:22px;transform:translate(-50%,-50%)}
+#hero{background:#682538;border:2px solid #e2a6b5}
+#npc{background:#344c64;border:2px solid #8cb3d6}
+#enemy{background:#68442a;border:2px solid #cfa47a}
+#dialog{position:absolute;bottom:4%;left:4%;width:92%;padding:12px;background:#080b12ee;border:1px solid #b37b8b;border-radius:8px;font-size:14px;display:none}
+#battle{position:absolute;inset:0;background:linear-gradient(#251b2b,#0b1018);display:none;padding:14px}
+#fighters{display:flex;justify-content:space-around;align-items:center;height:54%;font-size:45px}
+#battleInfo{font-size:14px}
+#atbTrack{height:9px;background:#303845;border-radius:9px;overflow:hidden;margin:8px 0}
+#atbFill{height:100%;width:0;background:#79c5dc}
+#menu{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+button{background:#462331;color:white;border:1px solid #b47e8e;border-radius:8px;padding:11px 15px;font-size:15px;touch-action:manipulation}
+button:disabled{opacity:.4}
+#controls{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px}
+#dpad{display:grid;grid-template-columns:repeat(3,50px);grid-template-rows:repeat(3,45px);gap:3px}
+#dpad button{padding:0;font-size:20px}
+#actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+#status{font-size:12px;color:#c9c9d4;margin-top:10px}
+small{color:#b7a7b1}
+
+/* v0.2: Phaser canvas overlays the legacy fallback map. */
+#phaser-root{position:absolute;inset:0;z-index:1;pointer-events:none}
+#field{z-index:0}
+#field.phaser-active{visibility:hidden}
+#dialog,#battle{z-index:2}
+#screen canvas{display:block;width:100%;height:100%}
+
+/* Animation integration test controls */
+#character-test{margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:#d6bac5}
+#characterSelect{background:#251b2b;color:#fff;border:1px solid #b47e8e;border-radius:8px;padding:9px}
+/* Prevent battle character names from overflowing into adjacent columns. */
+#fighters{min-height:0;gap:12px;font-size:clamp(18px,5vw,40px)}
+#fighters span{flex:1;min-width:0;text-align:center;overflow-wrap:anywhere}
+#fighters small{font-size:clamp(10px,2.2vw,18px)}
+#battle{padding:clamp(5px,2vw,14px)}
+#battleInfo{font-size:clamp(9px,2.2vw,14px)}
+#battle #menu{margin-top:5px;gap:5px}
+#battle #menu button{padding:5px 10px;font-size:clamp(11px,2vw,15px)}
+#battleLog{font-size:clamp(9px,2vw,13px);margin:5px 0}
+
+/* v0.2.4: full-viewport landscape exploration and unobtrusive touch controls. */
+html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none}
+#game{position:fixed;inset:0;width:100%;max-width:none;padding:0;margin:0;overflow:hidden;background:#08090e}
+h1{display:none}
+#screen{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;border:0}
+#phaser-root{background:#141d27}
+#screen canvas{width:100%!important;height:100%!important;object-fit:contain}
+#explorationHud{position:absolute;z-index:3;inset:0 0 auto 0;display:flex;align-items:flex-start;gap:8px;padding:calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 12px) 0 calc(env(safe-area-inset-left) + 12px);pointer-events:none}
+#hudName,#hudStatus{background:#090c14bb;border:1px solid #85506366;border-radius:7px;padding:7px 10px;font-size:clamp(10px,1.8vw,14px);white-space:nowrap;max-width:45vw;overflow:hidden;text-overflow:ellipsis}
+#hudName{color:#f2becd;font-weight:700;letter-spacing:.04em}
+#hudStatus{color:#e3d7dd}
+#menuToggle{pointer-events:auto;margin-left:auto;padding:7px 12px;font-size:18px;min-width:42px;min-height:38px;background:#101621cc}
+#touchOverlay{position:absolute;z-index:3;inset:0;pointer-events:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 calc(env(safe-area-inset-right) + 20px) calc(env(safe-area-inset-bottom) + 18px) calc(env(safe-area-inset-left) + 20px)}
+#joystick{pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;width:clamp(92px,19vh,138px);height:clamp(92px,19vh,138px);border-radius:50%;border:2px solid #c18b9a88;background:#111924aa;position:relative;box-shadow:0 2px 22px #0008}
+#stickKnob{position:absolute;left:50%;top:50%;width:42%;height:42%;transform:translate(-50%,-50%);border-radius:50%;background:#915469c9;border:2px solid #e0a6b8;box-shadow:0 2px 10px #0008}
+#touchActions{pointer-events:auto;display:flex;align-items:flex-end;gap:10px}
+#touchActions button{min-width:64px;min-height:54px;background:#452535dc;border-color:#d6a2b0;font-size:clamp(12px,2.2vw,16px);font-weight:600}
+#charTouch{opacity:.9}
+#utilityMenu{position:absolute;z-index:5;top:calc(env(safe-area-inset-top) + 54px);right:calc(env(safe-area-inset-right) + 10px);max-width:min(460px,90vw);max-height:calc(100% - 70px);overflow:auto;background:#10151ff2;border:1px solid #8c5366;border-radius:12px;padding:12px;display:none;box-shadow:0 12px 30px #000a}
+#utilityMenu.open{display:block}
+#controls{margin:10px 0 0;gap:8px}#dpad{grid-template-columns:repeat(3,38px);grid-template-rows:repeat(3,36px)}#dpad button{font-size:14px}#actions button{padding:9px 10px;font-size:13px}
+#status{margin-top:8px}#utilityMenu p{font-size:11px;margin-bottom:0}
+#battle{z-index:4;display:none;overflow:hidden;padding:clamp(10px,2vh,20px) max(16px,env(safe-area-inset-right)) clamp(10px,2vh,20px) max(16px,env(safe-area-inset-left));}
+#battleInfo{font-size:clamp(12px,2.5vh,19px);color:#ead2dc}
+#fighters{height:49%;gap:8%;align-items:center;font-size:clamp(24px,8vh,62px)}
+#fighters span{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-width:0;white-space:normal}
+#fighters small{font-size:clamp(11px,2.5vh,18px);line-height:1.2;overflow-wrap:anywhere}
+#atbTrack{margin:6px 0;height:8px}
+#battle #menu{margin:7px 0 0;gap:10px}#battle #menu button{padding:clamp(7px,1.6vh,12px) clamp(12px,2vw,22px);font-size:clamp(12px,2.5vh,17px);min-height:38px}
+#battleLog{font-size:clamp(11px,2.2vh,16px);margin:6px 0}
+#dialog{z-index:6;bottom:calc(env(safe-area-inset-bottom) + 12px);left:16%;width:68%;padding:clamp(9px,2vh,16px);font-size:clamp(12px,2.6vh,17px);pointer-events:auto}
+#landscapeNotice{display:none;position:absolute;z-index:7;left:50%;top:12%;transform:translateX(-50%);background:#151a24e8;border:1px solid #aa7788;padding:8px 12px;border-radius:8px;font-size:12px;white-space:nowrap;pointer-events:none}
+@media (orientation:portrait) and (max-width:700px){#landscapeNotice{display:block}#touchOverlay{padding:0 12px calc(env(safe-area-inset-bottom) + 25px)}#joystick{width:104px;height:104px}#hudStatus{display:none}#touchActions{gap:5px}#touchActions button{min-width:58px}}
+@media (max-height:340px){#explorationHud{padding-top:4px}#joystick{width:90px;height:90px}#touchActions button{min-height:40px}#fighters{height:40%}}
+body.in-battle #touchOverlay,body.in-battle #explorationHud{display:none}
+
+/* v0.2.5: combat actions sit lower while battle actors stay centered. */
+#battle{display:none;flex-direction:column;justify-content:stretch;}
+body.in-battle #battle{display:flex!important;}
+#battleInfo{flex:0 0 auto;padding-top:4px;}
+#fighters{height:auto;min-height:0;flex:1 1 auto;align-items:center;}
+#atbTrack{flex:0 0 auto;margin:6px 0 10px;}
+#battle #menu{flex:0 0 auto;justify-content:center;margin:0 0 5px;}
+#battle #menu button{min-height:clamp(42px,9vh,60px);min-width:clamp(76px,12vw,128px);}
+#battleLog{flex:0 0 auto;min-height:1.4em;text-align:center;margin:3px 0 2px;}
+#touchActions{padding-bottom:env(safe-area-inset-bottom);}
+#joystick{margin-bottom:env(safe-area-inset-bottom);}
+@media (max-height:340px){#battle #menu button{min-height:36px}#battleLog{margin:1px 0}}
+
+/* v0.3.6: slightly lower/left joystick; keep safe-area inset and touch hitbox together. */
+@media (orientation:landscape){#joystick{transform:translate(-10px,8px);}}
+
+/* v0.3.7: landscape controls nearer the bottom corners; leave sprite/navigation logic untouched. */
+@media (orientation:landscape){
+ #joystick{transform:translate(-24px,15px);}
+ #touchActions{transform:translate(-24px,10px);}
+}
+
+/* v0.4.0: compact touch-friendly conversation panel; retain v0.3.7 control positions. */
+#dialog{max-height:58%;overflow-y:auto;line-height:1.45;box-shadow:0 10px 28px #000b;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+#dialogSpeaker{font-size:clamp(11px,2.4vh,16px);font-weight:700;color:#f1b4c7;margin-bottom:4px}
+#dialogText{font-size:clamp(12px,2.8vh,17px);white-space:pre-wrap}
+#dialogHint{text-align:right;color:#d0a6b3;font-size:clamp(10px,2vh,13px);margin-top:5px}
