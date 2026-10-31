@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>BLACK SERIES RPG Ver.0.4.0</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="game">
+<h1>BLACK SERIES RPG</h1>
+<div id="screen">
+<div id="explorationHud"><div id="hudName">KINGMAKER</div><div id="hudStatus">HP 100/100　SP 30/30</div><button id="menuToggle" aria-label="メニュー" onclick="toggleUtilityMenu()">☰</button></div>
+<div id="phaser-root" aria-hidden="true"></div>
+<div id="field">
+<div id="hero" class="actor">♛</div>
+<div id="npc" class="actor">♟</div>
+<div id="enemy" class="actor">⚔</div>
+</div>
+<div id="dialog" role="dialog" aria-label="会話" aria-live="polite"><div id="dialogSpeaker"></div><div id="dialogText"></div><div id="dialogHint">タップ・調べるで次へ ▸</div></div>
+<div id="landscapeNotice">スマホを横向きにすると、広い画面で遊べるよ ↻</div>
+<div id="battle">
+<div id="battleInfo">TEST BATTLE</div>
+<div id="fighters"><span>👤<br><small>TEST ENEMY</small></span><span>♛<br><small>KINGMAKER</small></span></div>
+<div id="atbTrack"><div id="atbFill"></div></div>
+<div id="menu">
+<button id="attack" onclick="attack()">攻撃</button>
+<button id="guard" onclick="guard()">防御</button>
+<button onclick="escapeBattle()">撤退</button>
+</div>
+<p id="battleLog">戦闘開始！</p>
+</div>
+</div>
+<div id="touchOverlay"><div id="joystick" aria-label="移動スティック"><div id="stickKnob"></div></div><div id="touchActions"><button id="interactTouch" onclick="interact()">調べる</button><button id="charTouch" onclick="switchCharacter()">切替</button></div></div>
+<div id="utilityMenu"><div id="character-test"><label for="characterSelect">探索キャラクター（開発テスト）：</label><select id="characterSelect" onchange="if(window.BSSetExplorationCharacter)window.BSSetExplorationCharacter(this.value)"><option value="kingmaker">KINGMAKER</option><option value="leviathan">LEVIATHAN</option></select></div>
+<div id="controls">
+<div id="dpad">
+<span></span><button onclick="move(0,-1)">▲</button><span></span>
+<button onclick="move(-1,0)">◀</button><span></span><button onclick="move(1,0)">▶</button>
+<span></span><button onclick="move(0,1)">▼</button><span></span>
+</div>
+<div id="actions">
+<button onclick="interact()">調べる</button>
+<button onclick="save()">保存</button>
+<button onclick="load()">読込</button>
+</div>
+</div>
+<div id="status"></div>
+</div><!-- utilityMenu -->
+<p><small>開発専用テストマップ／仮NPC・仮敵・仮台詞。原作公式設定には含まれません。Phaserの読み込みにはインターネット接続が必要です。</small></p>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
+<script src="js/state.js"></script>
+<script src="js/exploration.js"></script>
+<script src="js/battle.js"></script>
+<script src="js/save.js"></script>
+<script src="js/phaser-scene.js"></script>
+<script src="js/main.js"></script>
+<script src="js/mobile-ui.js"></script>
+</body>
+</html>
