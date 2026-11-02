@@ -245,37 +245,37 @@
     ]);
   }
 
-    function boot() {
+      function boot() {
     const game = window.BSPhaserGame;
 
-    if (!game || !game.scene) {
+    if (!game || !game.scene) return false;
+
+    let scene;
+
+    try {
+      scene = game.scene.getScene("TestField");
+    } catch (error) {
       return false;
     }
 
-    const scene = game.scene.getScene("TestField");
-
     if (
-      scene &&
-      scene.sys.isActive() &&
-      scene.heroSprite &&
-      scene.summitMembers.lucifer
+      !scene ||
+      !scene.sys.isActive() ||
+      !scene.heroSprite ||
+      !scene.summitMembers?.lucifer
     ) {
-      init(scene);
-      return true;
+      return false;
     }
 
-    return false;
+    init(scene);
+    return true;
   }
 
   if (!boot()) {
     const timer = setInterval(() => {
-      if (boot()) {
-        clearInterval(timer);
-      }
+      if (boot()) clearInterval(timer);
     }, 100);
 
-    setTimeout(() => {
-      clearInterval(timer);
-    }, 15000);
+    setTimeout(() => clearInterval(timer), 15000);
   }
 })();
