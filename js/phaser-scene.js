@@ -1287,7 +1287,7 @@
   }
 
   try {
-    new Phaser.Game({
+    window.BSPhaserGame = new Phaser.Game({
       type: Phaser.CANVAS,
       parent: "phaser-root",
       width: WIDTH,
