@@ -245,20 +245,37 @@
     ]);
   }
 
-  function boot() {
-    if (!window.Phaser || !Phaser.GAMES) return false;
-    for (const game of Phaser.GAMES) {
-      if (!game?.scene) continue;
-      const scene = game.scene.getScene("TestField");
-      if (scene?.sys?.isActive() && scene.heroSprite) {
-        init(scene);
-        return true;
-      }
+    function boot() {
+    const game = window.BSPhaserGame;
+
+    if (!game || !game.scene) {
+      return false;
     }
+
+    const scene = game.scene.getScene("TestField");
+
+    if (
+      scene &&
+      scene.sys.isActive() &&
+      scene.heroSprite &&
+      scene.summitMembers.lucifer
+    ) {
+      init(scene);
+      return true;
+    }
+
     return false;
   }
+
   if (!boot()) {
-    const timer = setInterval(() => { if (boot()) clearInterval(timer); }, 100);
-    setTimeout(() => clearInterval(timer), 15000);
+    const timer = setInterval(() => {
+      if (boot()) {
+        clearInterval(timer);
+      }
+    }, 100);
+
+    setTimeout(() => {
+      clearInterval(timer);
+    }, 15000);
   }
 })();
