@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.7
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.8 (initial HUD label fix)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -488,6 +488,9 @@
     scene.isMoving = false;
     if (typeof place === "function") place();
     scene.refreshHero(false);
+    // Match the initial HUD label to the official Japanese character name.
+    const initialHud = document.getElementById("hudName");
+    if (initialHud) initialHud.textContent = NAMES[scene.heroName];
     scene.bsObjective = scene.add.text(450, 64, "", {
       fontFamily: "system-ui", fontSize: "14px", color: "#f5e5e9",
       backgroundColor: "#0b101bd9", padding: { x: 12, y: 7 }
