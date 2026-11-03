@@ -1,13 +1,14 @@
 
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.0
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.1
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
   const IDS = ["kingmaker", "lucifer", "lilith", "goliath"];
   const NAMES = { kingmaker: "キングメイカー", lucifer: "ルシファー", lilith: "リリス", goliath: "ゴライアス" };
-  const SPEED = { kingmaker: 125, lucifer: 137, lilith: 130, goliath: 116 }; // follower px/sec
-  const SPACING = 61;
+  const SPEED = { kingmaker: 125, lucifer: 115, lilith: 115, goliath: 115 }; // provisional follower px/sec
+  const SPACING = 55;
+  const LEADER_SPEED = { kingmaker: 1.25, lucifer: 1, lilith: 1, goliath: 1 };
   const CREW = [
     { id: "lucifer", x: 260, y: 163 },
     { id: "lilith", x: 653, y: 173 },
@@ -22,6 +23,7 @@
   const WALK_WIDTH = { kingmaker: { right: 1.10 } };
   const oldInteract = window.interact;
   const oldSwitch = window.switchCharacter;
+  const oldMove = window.BSTryMove;
 
   function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
   function canStand(px, py) {
@@ -134,100 +136,219 @@
     const mode = moving ? "walk" : "idle";
     const key = `${id}_${mode}_${dir}`;
     if (sprite.anims.currentAnim?.key !== key) sprite.play(key, true);
-
+    
     const base = SCALE[id] * HEIGHTS.idle / HEIGHTS[mode] * (mode === "idle" ? (CORRECTION[id] || 1) : 1);
     const width = mode === "walk" ? (WALK_WIDTH[id]?.[dir] || 1) : 1;
     sprite.setScale(base * width, base).setOrigin(.5, FOOT[id][mode] / 160);
   }
-  function pointOf(sprite) { return { x: sprite.x, y: sprite.y }; }
+
+  function pointOf(sprite) {
+    return { x: sprite.x, y: sprite.y };
+  }
+
   function moveActor(actor, target, dt, maxSpeed) {
-    const sprite = actor.sprite, start = pointOf(sprite);
+    const sprite = actor.sprite;
+    const start = pointOf(sprite);
     const dist = distance(start, target);
-    if (dist < 4) { setActorAnimation(actor.id, sprite, false, actor.dir); return true; }
+
+    if (dist < 10) {
+      setActorAnimation(actor.id, sprite, false, actor.dir);
+      return true;
+    }
+
     actor.repath -= dt;
-    if (!actor.path.length || actor.repath <= 0 || distance(actor.goal || start, target) > 28) {
+
+    if (
+      !actor.path.length ||
+      actor.repath <= 0 ||
+      distance(actor.goal || start, target) > 28
+    ) {
       actor.path = pathTo(start, target);
       actor.goal = { x: target.x, y: target.y };
       actor.repath = .28;
     }
-    while (actor.path.length && distance(start, actor.path[0]) < 9) actor.path.shift();
+
+    while (actor.path.length && distance(start, actor.path[0]) < 9) {
+      actor.path.shift();
+    }
+
     const aim = actor.path[0];
-    if (!aim) { setActorAnimation(actor.id, sprite, false, actor.dir); return false; }
-    const dx = aim.x - sprite.x, dy = aim.y - sprite.y, length = Math.hypot(dx, dy);
+
+    if (!aim) {
+      setActorAnimation(actor.id, sprite, false, actor.dir);
+      return false;
+    }
+
+    const dx = aim.x - sprite.x;
+    const dy = aim.y - sprite.y;
+    const length = Math.hypot(dx, dy);
     const step = Math.min(length, maxSpeed * dt);
-    const nx = sprite.x + dx / length * step, ny = sprite.y + dy / length * step;
-    const moving = step > .08 && clearPath(start, { x: nx, y: ny });
+
+    if (length < .001) {
+      actor.path.shift();
+      return false;
+    }
+
+    const nx = sprite.x + dx / length * step;
+    const ny = sprite.y + dy / length * step;
+    const moving = step > .08 &&
+      clearPath(start, { x: nx, y: ny });
+
     if (moving) {
       sprite.setPosition(nx, ny);
-      actor.dir = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? "left" : "right") : (dy < 0 ? "back" : "front");
-    } else actor.repath = 0;
+      actor.dir = Math.abs(dx) >= Math.abs(dy)
+        ? (dx < 0 ? "left" : "right")
+        : (dy < 0 ? "back" : "front");
+    } else {
+      actor.repath = 0;
+    }
+
     setActorAnimation(actor.id, sprite, moving, actor.dir);
     return distance(pointOf(sprite), target) < 10;
   }
+
   function recordTrail() {
     const p = { x: W * x / 100, y: H * y / 100 };
     const trail = ROOF.trail;
-    if (!trail.length || distance(trail[trail.length - 1], p) > 2) trail.push(p);
-    if (trail.length > 1300) trail.splice(0, trail.length - 1300);
+
+    if (
+      !trail.length ||
+      distance(trail[trail.length - 1], p) > 2
+    ) {
+      trail.push(p);
+    }
+
+    if (trail.length > 1300) {
+      trail.splice(0, trail.length - 1300);
+    }
   }
+
   function trailTarget(behind) {
     const trail = ROOF.trail;
-    if (!trail.length) return { x: W * x / 100, y: H * y / 100 };
+
+    if (!trail.length) {
+      return { x: W * x / 100, y: H * y / 100 };
+    }
+
     let left = behind;
+
     for (let i = trail.length - 1; i > 0; i--) {
-      const a = trail[i], b = trail[i - 1], length = distance(a, b);
+      const a = trail[i];
+      const b = trail[i - 1];
+      const length = distance(a, b);
+
       if (length >= left) {
         const t = length ? left / length : 0;
-        return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+        return {
+          x: a.x + (b.x - a.x) * t,
+          y: a.y + (b.y - a.y) * t
+        };
       }
+
       left -= length;
     }
+
     return trail[0];
   }
+
   function switchTo(id) {
-    if (ROOF.phase !== "party" || !IDS.includes(id) || fighting || BSDialogue.active) return false;
+    if (
+      ROOF.phase !== "party" ||
+      !IDS.includes(id) ||
+      fighting ||
+      BSDialogue.active
+    ) {
+      return false;
+    }
+
     const scene = ROOF.scene;
     const current = scene.heroName;
+
     if (current === id) return true;
+
     const next = ROOF.members[id];
     const old = ROOF.members[current];
+
     if (!next || !old) return false;
-    const oldPosition = { x: W * x / 100, y: H * y / 100 };
+
+    const oldPosition = {
+      x: W * x / 100,
+      y: H * y / 100
+    };
+
     const nextPosition = pointOf(next.sprite);
-    old.sprite.setPosition(oldPosition.x, oldPosition.y).setVisible(true);
-    old.label.setPosition(oldPosition.x, oldPosition.y + 10).setVisible(false);
+
+    // Keep the previous leader at the exact handover position.
+    old.sprite
+      .setPosition(oldPosition.x, oldPosition.y)
+      .setVisible(true);
+
+    old.label.setVisible(false);
     old.dir = facing;
+
+    // Important: apply the normal display scale before showing.
     setActorAnimation(current, old.sprite, false, old.dir);
+
     next.sprite.setVisible(false);
     next.label.setVisible(false);
+
     scene.heroName = id;
     scene.currentAnimation = "";
+
     x = nextPosition.x / W * 100;
     y = nextPosition.y / H * 100;
     facing = next.dir;
+
     scene.refreshHero(false);
-    ROOF.trail = [{ x: W * x / 100, y: H * y / 100 }];
+
+    // Reset the party trail after switching leaders.
+    ROOF.trail = [{
+      x: W * x / 100,
+      y: H * y / 100
+    }];
+
+    // Keep the hidden development selector synchronized.
+    const selector = document.getElementById("characterSelect");
+    if (selector) selector.value = id;
+
     const hud = document.getElementById("hudName");
     if (hud) hud.textContent = NAMES[id];
+
     return true;
   }
+
   function cycle() {
     const i = IDS.indexOf(ROOF.scene.heroName);
     return switchTo(IDS[(i + 1) % IDS.length]);
   }
+
   function interactRoof() {
     if (!ROOF.active) return oldInteract?.();
     if (fighting) return;
-    if (BSDialogue.active) { BSAdvanceDialogue(); return; }
+
+    if (BSDialogue.active) {
+      BSAdvanceDialogue();
+      return;
+    }
+
     const p = { x: W * x / 100, y: H * y / 100 };
+
     if (ROOF.phase === "scout") {
-      let closest = null, best = 86;
+      let closest = null;
+      let best = 86;
+
       for (const c of CREW) {
         const d = distance(p, c);
-        if (d < best) { best = d; closest = c; }
+
+        if (d < best) {
+          best = d;
+          closest = c;
+        }
       }
+
       if (closest) {
         const id = closest.id;
+
         const lines = id === "lucifer" ? [
           { speaker: "ルシファー", text: "事前情報では二十人前後でした。" },
           { speaker: "ルシファー", text: "見えるだけで、それ以上いますね。" },
@@ -240,153 +361,341 @@
           { speaker: "ゴライアス", text: "裏口に車が三台。" },
           { speaker: "ゴライアス", text: "非戦闘員は中央から離れている。" }
         ];
+
         dialogue(lines, () => {
           ROOF.found[id] = true;
+
           if (CREW.every(c => ROOF.found[c.id])) {
             ROOF.phase = "rally";
             ROOF.rallyStarted = false;
+            ROOF.rallyElapsed = 0;
           }
+
           objective();
         });
+
         return;
       }
-      dialogue([{ speaker: "探索", text: "仲間から偵察情報を集めよう。" }]);
+
+      dialogue([{
+        speaker: "探索",
+        text: "仲間から偵察情報を集めよう。"
+      }]);
       return;
     }
+
     if (ROOF.phase === "rally") {
-      dialogue([{ speaker: "探索", text: "仲間が集合している。" }]);
+      dialogue([{
+        speaker: "探索",
+        text: "仲間が集合している。"
+      }]);
       return;
     }
+
     if (distance(p, EXIT) < 92) {
       dialogue([
-
+        
         { speaker: "キングメイカー", text: "確認してから入る。" },
         { speaker: "キングメイカー", text: "始めるぞ。" },
         { speaker: "SYSTEM", text: "屋上偵察完了。次の倉庫潜入マップは今後実装予定です。" }
       ]);
       return;
     }
-    dialogue([{ speaker: "探索", text: "雨に濡れた屋上から、港の灯りが見える。" }]);
+
+    dialogue([
+      { speaker: "探索", text: "雨に濡れた屋上から、港の灯りが見える。" }
+    ]);
   }
+
+  function finishRally() {
+    ROOF.phase = "party";
+
+    const leader = {
+      x: W * x / 100,
+      y: H * y / 100
+    };
+
+    ROOF.trail = [leader];
+
+    for (const c of CREW) {
+      ROOF.members[c.id].label.setVisible(false);
+    }
+
+    const btn = document.getElementById("charTouch");
+    if (btn) btn.style.display = "";
+
+    objective();
+
+    dialogue([
+      {
+        speaker: "SYSTEM",
+        text: "4人が合流しました。「切替」で操作キャラクターを変更できます。"
+      }
+    ]);
+  }
+
   function tick(time, delta) {
     if (!ROOF.active) return;
+
     if (ROOF.waiting && !BSDialogue.active) {
       ROOF.waiting = false;
       const done = ROOF.pending;
       ROOF.pending = null;
       if (done) done();
     }
+
     if (fighting || BSDialogue.active) return;
+
     const dt = Math.min(delta / 1000, .05);
     const scene = ROOF.scene;
+
     if (ROOF.phase === "rally") {
-      const leader = { x: W * x / 100, y: H * y / 100 };
+      ROOF.rallyElapsed = (ROOF.rallyElapsed || 0) + dt;
+
+      const leader = {
+        x: W * x / 100,
+        y: H * y / 100
+      };
+
       const positions = [
         { x: leader.x - 42, y: leader.y + 48 },
         { x: leader.x + 42, y: leader.y + 48 },
         { x: leader.x, y: leader.y + 85 }
       ];
+
       let all = true;
+
       CREW.forEach((c, i) => {
-        const a = ROOF.members[c.id];
+        const actor = ROOF.members[c.id];
         const goal = positions[i];
         const safeGoal = canStand(goal.x, goal.y) ? goal : leader;
-        if (!moveActor(a, safeGoal, dt, SPEED[c.id])) all = false;
-        a.label.setPosition(a.sprite.x, a.sprite.y + 10);
+
+        if (!moveActor(actor, safeGoal, dt, SPEED[c.id])) {
+          all = false;
+        }
+
+        actor.label.setPosition(
+          actor.sprite.x,
+          actor.sprite.y + 10
+        );
       });
-      if (all) {
-        ROOF.phase = "party";
-        ROOF.trail = [leader];
-        for (const c of CREW) ROOF.members[c.id].label.setVisible(false);
-        const btn = document.getElementById("charTouch");
-        if (btn) btn.style.display = "";
-        objective();
-        dialogue([{ speaker: "SYSTEM", text: "4人が合流しました。「切替」で操作キャラクターを変更できます。" }]);
+
+      // Avoid a long wait if an actor cannot reach the exact slot.
+      if (all || ROOF.rallyElapsed >= 8) {
+        finishRally();
       }
+
       return;
     }
+
     if (ROOF.phase !== "party") return;
+
     recordTrail();
+
     const others = IDS.filter(id => id !== scene.heroName);
+
     others.forEach((id, index) => {
       const actor = ROOF.members[id];
       const target = trailTarget(SPACING * (index + 1));
       const gap = distance(pointOf(actor.sprite), target);
-      const speed = SPEED[id] * (gap > 165 ? 1.75 : gap > 95 ? 1.35 : 1);
+
+      const speed = SPEED[id] * (
+        gap > 165 ? 1.75 :
+        gap > 95 ? 1.35 : 1
+      );
+
       moveActor(actor, target, dt, speed);
-      actor.sprite.setDepth(9 + actor.sprite.y / 1000);
+
+      actor.sprite.setDepth(
+        9 + actor.sprite.y / 1000
+      );
     });
   }
+
   function init(scene) {
-    if (ROOF.active || !scene?.heroSprite || !scene.summitMembers?.lucifer) return;
+    if (
+      ROOF.active ||
+      !scene?.heroSprite ||
+      !scene.summitMembers?.lucifer
+    ) return;
+
     ROOF.active = true;
     ROOF.scene = scene;
+
     for (const child of scene.children.list.slice()) {
-      if (child instanceof Phaser.GameObjects.Graphics) child.setVisible(false);
+      if (child instanceof Phaser.GameObjects.Graphics) {
+        child.setVisible(false);
+      }
     }
+
     drawRoof(scene);
+
     for (const actor of Object.values(scene.actors || {})) {
-      actor.rect?.setVisible(false); actor.txt?.setVisible(false);
+      actor.rect?.setVisible(false);
+      actor.txt?.setVisible(false);
     }
+
     for (const button of Object.values(scene.testButtons || {})) {
       button.bg?.setVisible(false).disableInteractive();
       button.txt?.setVisible(false).disableInteractive();
     }
+
     scene.followerSprite?.setVisible(false);
-    // Keep the existing sprites and all animation keys; never recreate PNG textures.
+
+    // Disable the old two-character follower on this map.
+    scene.update = function () {};
+
+    // Preserve the existing sprite sheets and animation corrections.
     for (const c of CREW) {
-      const m = scene.summitMembers[c.id];
-      m.sprite.setPosition(c.x, c.y).setVisible(true);
-      m.label.setPosition(c.x, c.y + 10).setVisible(true);
-      ROOF.members[c.id] = { id: c.id, sprite: m.sprite, label: m.label, dir: "front", path: [], goal: null, repath: 0 };
+      const member = scene.summitMembers[c.id];
+
+      member.sprite
+        .setPosition(c.x, c.y)
+        .setVisible(true);
+
+      member.label
+        .setPosition(c.x, c.y + 10)
+        .setVisible(true);
+
+      ROOF.members[c.id] = {
+        id: c.id,
+        sprite: member.sprite,
+        label: member.label,
+        dir: "front",
+        path: [],
+        goal: null,
+        repath: 0
+      };
     }
-    const kingSprite = scene.add.sprite(0, 0, "kingmaker_idle", 0).setVisible(false);
-    ROOF.members.kingmaker = { id: "kingmaker", sprite: kingSprite, label: { setVisible() {}, setPosition() {} }, dir: "right", path: [], goal: null, repath: 0 };
-    BS_OBSTACLES.splice(0, BS_OBSTACLES.length,
+
+    const kingSprite = scene.add
+      .sprite(0, 0, "kingmaker_idle", 0)
+      .setVisible(false)
+      .setDepth(9);
+
+    ROOF.members.kingmaker = {
+      id: "kingmaker",
+      sprite: kingSprite,
+      label: {
+        setVisible() {},
+        setPosition() {}
+      },
+      dir: "right",
+      path: [],
+      goal: null,
+      repath: 0
+    };
+
+    // Ensure KINGMAKER follower uses the same scale as the hero.
+    setActorAnimation(
+      "kingmaker",
+      kingSprite,
+      false,
+      "right"
+    );
+
+    BS_OBSTACLES.splice(
+      0,
+      BS_OBSTACLES.length,
       { x: 360, y: 115, w: 110, h: 75 },
       { x: 405, y: 355, w: 125, h: 70 },
-      { x: 79, y: 300, w: 130, h: 130 });
-    x = 27; y = 56; facing = "right";
+      { x: 79, y: 300, w: 130, h: 130 }
+    );
+
+    x = 27;
+    y = 56;
+    facing = "right";
+
     scene.heroName = "kingmaker";
     scene.currentAnimation = "";
     scene.isMoving = false;
+
     if (typeof place === "function") place();
     scene.refreshHero(false);
-    scene.bsObjective = scene.add.text(450, 64, "", {
-      fontFamily: "system-ui", fontSize: "14px", color: "#f5e5e9",
-      backgroundColor: "#0b101bd9", padding: { x: 12, y: 7 }
-    }).setOrigin(.5, 0).setDepth(120);
-    scene.bsExitLabel = scene.add.text(EXIT.x, EXIT.y + 45, "▼ 階段入口", {
-      fontFamily: "system-ui", fontSize: "13px", color: "#f5dfb8",
-      backgroundColor: "#111b25e6", padding: { x: 6, y: 4 }
-    }).setOrigin(.5).setDepth(121).setVisible(false);
+
+    scene.bsObjective = scene.add.text(
+      450, 64, "",
+      {
+        fontFamily: "system-ui",
+        fontSize: "14px",
+        color: "#f5e5e9",
+        backgroundColor: "#0b101bd9",
+        padding: { x: 12, y: 7 }
+      }
+    ).setOrigin(.5, 0).setDepth(120);
+
+    scene.bsExitLabel = scene.add.text(
+      EXIT.x,
+      EXIT.y + 45,
+      "▼ 階段入口",
+      {
+        fontFamily: "system-ui",
+        fontSize: "13px",
+        color: "#f5dfb8",
+        backgroundColor: "#111b25e6",
+        padding: { x: 6, y: 4 }
+      }
+    ).setOrigin(.5).setDepth(121).setVisible(false);
+
     objective();
+
     const charButton = document.getElementById("charTouch");
     if (charButton) charButton.style.display = "none";
+
     const testSelect = document.getElementById("character-test");
     if (testSelect) testSelect.style.display = "none";
+
     const footer = document.querySelector("#game > p");
     if (footer) footer.style.display = "none";
+
+    window.BSGetLeaderSpeed = () =>
+      LEADER_SPEED[scene.heroName] || 1;
+
+    window.BSGetLeaderName = () =>
+      scene.heroName;
+
     window.BSSetExplorationCharacter = switchTo;
     window.switchCharacter = cycle;
     window.interact = interactRoof;
+
     scene.events.on("update", tick);
+
     dialogue([
       { speaker: "キングメイカー", text: "……多いな。" },
-      { speaker: "SYSTEM", text: "仲間の3人に近づき、「調べる」で偵察情報を確認しよう。" }
+      {
+        speaker: "SYSTEM",
+        text: "仲間の3人に近づき、「調べる」で偵察情報を確認しよう。"
+      }
     ]);
   }
+
   function boot() {
     const game = window.BSPhaserGame;
     if (!game?.scene) return false;
+
     let scene;
-    try { scene = game.scene.getScene("TestField"); } catch (error) { return false; }
-    if (!scene?.sys?.isActive() || !scene.heroSprite || !scene.summitMembers?.lucifer) return false;
+
+    try {
+      scene = game.scene.getScene("TestField");
+    } catch (error) {
+      return false;
+    }
+
+    if (
+      !scene?.sys?.isActive() ||
+      !scene.heroSprite ||
+      !scene.summitMembers?.lucifer
+    ) return false;
+
     init(scene);
     return ROOF.active;
   }
+
   if (!boot()) {
-    const timer = setInterval(() => { if (boot()) clearInterval(timer); }, 100);
+    const timer = setInterval(() => {
+      if (boot()) clearInterval(timer);
+    }, 100);
+
     setTimeout(() => clearInterval(timer), 15000);
   }
 })();
