@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.9 (visual-only photographic background test)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.10 (visual polish; gameplay unchanged)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -139,10 +139,10 @@
       g.fillStyle(0xe4bc80, .16); g.fillEllipse(lx, 112, 86, 26);
       g.fillStyle(0xe4bc80, .9); g.fillRect(lx - 7, 99, 14, 5);
     }
-    scene.add.text(48, 23, "東湾第七码頭物流倉庫  ／  屋上", {
-      fontFamily: "system-ui", fontSize: "17px", fontStyle: "bold", color: "#e3e7ed",
-      backgroundColor: "#0b1424bb", padding: { x: 9, y: 6 }
-    }).setDepth(30);
+    scene.add.text(450, 14, "東湾第七码頭物流倉庫 ／ 屋上", {
+      fontFamily: "system-ui", fontSize: "12px", color: "#d8dce3",
+      backgroundColor: "#0b1424bb", padding: { x: 7, y: 4 }
+    }).setOrigin(.5, 0).setDepth(30);
   }
 
   // v0.5.9: visual-only photo backdrop. Gameplay and collision are untouched.
@@ -156,22 +156,36 @@
         if (!scene.textures.exists(key)) scene.textures.addImage(key, image);
         scene.add.image(W / 2, H / 2, key)
           .setDisplaySize(W, H).setDepth(-9);
-        // These understated outlines preserve readability where the new
-        // photographic equipment differs from the existing collision geometry.
-        const guide = scene.add.graphics().setDepth(-8);
-        guide.fillStyle(0x111a25, 0.32);
-        guide.lineStyle(2, 0xb5a5a0, 0.38);
-        for (const o of BS_OBSTACLES) {
-          guide.fillRoundedRect(o.x, o.y, o.w, o.h, 5);
-          guide.strokeRoundedRect(o.x, o.y, o.w, o.h, 5);
-        }
-        console.info("BLACK SERIES rooftop photo test loaded (v0.5.9)");
+        // No collision-guide overlays: keep all original collision data unchanged.
+        console.info("BLACK SERIES rooftop visual polish loaded (v0.5.10)");
       } catch (error) {
         console.warn("Rooftop photo unavailable; using original background", error);
       }
     };
     image.onerror = () => console.warn("Rooftop image missing: assets/maps/ep001-rooftop-v0.5.9.jpg");
     image.src = "assets/maps/ep001-rooftop-v0.5.9.jpg?v=059";
+  }
+
+  // Soft contact shadows match the wet rooftop without modifying sprites.
+  // Depth 8 stays behind the character sprites (depth 9+).
+  function updateContactShadows() {
+    const scene = ROOF.scene;
+    const shadow = ROOF.contactShadows;
+    if (!scene || !shadow || !scene.heroSprite) return;
+    shadow.clear();
+    for (const id of IDS) {
+      const sprite = id === scene.heroName ? scene.heroSprite : ROOF.members[id]?.sprite;
+      if (!sprite || !sprite.visible) continue;
+      const px = id === scene.heroName ? W * x / 100 : sprite.x;
+      const py = id === scene.heroName ? H * y / 100 : sprite.y;
+      // Soft concentric ellipses, kept subtle over photographic reflections.
+      shadow.fillStyle(0x02050a, 0.11);
+      shadow.fillEllipse(px + 3, py + 3, 53, 17);
+      shadow.fillStyle(0x02050a, 0.19);
+      shadow.fillEllipse(px + 2, py + 2, 38, 11);
+      shadow.fillStyle(0x02050a, 0.24);
+      shadow.fillEllipse(px + 1, py + 1, 24, 6);
+    }
   }
 
   function objective() {
@@ -438,6 +452,7 @@
   }
   function tick(time, delta) {
     if (!ROOF.active) return;
+    updateContactShadows();
     if (ROOF.waiting && !BSDialogue.active) {
       ROOF.waiting = false;
       const done = ROOF.pending; ROOF.pending = null;
@@ -487,6 +502,7 @@
     }
     drawRoof(scene);
     addRooftopPhoto(scene);
+    ROOF.contactShadows = scene.add.graphics().setDepth(8);
     for (const actor of Object.values(scene.actors || {})) {
       actor.rect?.setVisible(false); actor.txt?.setVisible(false);
     }
