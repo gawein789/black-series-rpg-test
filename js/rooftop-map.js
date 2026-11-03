@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.6
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.7
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -168,51 +168,74 @@
     sprite.setScale(base * width, base).setOrigin(.5, FOOT[id][mode] / 160);
   }
   function pointOf(sprite) { return { x: sprite.x, y: sprite.y }; }
+  // Smooth pursuit. Switching logic below is intentionally unchanged from v0.5.6.
   function moveActor(actor, desired, dt, maxSpeed) {
     const sprite = actor.sprite;
     const start = pointOf(sprite);
-    const target = safeNear(desired, start);
-    if (!target) { setActorAnimation(actor.id, sprite, false, actor.dir); return false; }
-    if (distance(start, target) < 11) {
-      actor.path = [];
-      actor.stuck = 0;
-      setActorAnimation(actor.id, sprite, false, actor.dir);
-      return true;
+    // Avoid a different nearest-safe-point being chosen every single frame.
+    const target = canStand(desired.x, desired.y) ? desired : safeNear(desired, start);
+    if (!target) {
+      actor.animHold = Math.max(0, (actor.animHold || 0) - dt);
+      setActorAnimation(actor.id, sprite, actor.animHold > 0, actor.dir);
+      return false;
+    }
+    const gap = distance(start, target);
+    // Hysteresis avoids toggling walk/idle around one exact threshold.
+    actor.walking = actor.walking ? gap > 13 : gap > 24;
+    if (!actor.walking) {
+      actor.speed = Math.max(0, (actor.speed || 0) - 250 * dt);
+      actor.animHold = Math.max(0, (actor.animHold || 0) - dt);
+      setActorAnimation(actor.id, sprite, actor.animHold > 0, actor.dir);
+      return gap < 24;
     }
     actor.repath = (actor.repath || 0) - dt;
-    if (!actor.path.length || actor.repath <= 0 || distance(actor.goal || start, target) > 16) {
+    const direct = clearPath(start, target);
+    if (direct) {
+      actor.path = [target];
+      actor.goal = { x: target.x, y: target.y };
+      actor.repath = .55;
+    } else if (!actor.path.length || actor.repath <= 0 ||
+               distance(actor.goal || start, target) > 52) {
       actor.path = pathTo(start, target);
-      actor.goal = { ...target };
-      actor.repath = .20;
+      actor.goal = { x: target.x, y: target.y };
+      actor.repath = .55;
     }
-    while (actor.path.length > 1 && distance(start, actor.path[0]) < 10) actor.path.shift();
+    while (actor.path.length > 1 && distance(start, actor.path[0]) < 13) actor.path.shift();
     const aim = actor.path[0];
     let moved = false;
     if (aim) {
       const dx = aim.x - sprite.x, dy = aim.y - sprite.y;
       const length = Math.hypot(dx, dy);
       if (length > .01) {
-        const step = Math.min(length, maxSpeed * dt);
+        const desiredSpeed = maxSpeed * Math.min(1, Math.max(.40, (gap - 10) / 80));
+        const oldSpeed = actor.speed || 0;
+        actor.speed = oldSpeed + Math.max(-280 * dt, Math.min(260 * dt, desiredSpeed - oldSpeed));
+        const step = Math.min(length, actor.speed * dt);
         const next = { x: sprite.x + dx / length * step, y: sprite.y + dy / length * step };
-        if (step > .05 && clearPath(start, next)) {
+        if (step > .04 && clearPath(start, next)) {
           sprite.setPosition(next.x, next.y);
-          actor.dir = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? "left" : "right") : (dy < 0 ? "back" : "front");
+          actor.dir = Math.abs(dx) >= Math.abs(dy)
+            ? (dx < 0 ? "left" : "right") : (dy < 0 ? "back" : "front");
           moved = true;
         }
       }
     }
     actor.stuck = moved ? 0 : (actor.stuck || 0) + dt;
-    if (!moved) actor.repath = 0;
-    // Recover from blocked routes without leaving a member frozen forever.
-    if (actor.stuck > 1.2 && distance(start, target) > 90) {
+    if (!moved && actor.stuck > .35) {
+      actor.repath = 0;
+      actor.path = [];
+    }
+    // Retain the successful v0.5.6 recovery for genuinely stuck followers.
+    if (actor.stuck > 1.2 && gap > 90) {
       const recovery = safeNear({ x: target.x - 28, y: target.y + 22 }, start);
       if (recovery && clearPath(target, recovery)) {
         sprite.setPosition(recovery.x, recovery.y);
-        actor.path = []; actor.stuck = 0; actor.repath = 0;
+        actor.path = []; actor.stuck = 0; actor.repath = 0; actor.speed = 0;
       }
     }
-    setActorAnimation(actor.id, sprite, moved, actor.dir);
-    return distance(pointOf(sprite), target) < 11;
+    actor.animHold = moved ? .20 : Math.max(0, (actor.animHold || 0) - dt);
+    setActorAnimation(actor.id, sprite, moved || actor.animHold > 0, actor.dir);
+    return distance(pointOf(sprite), target) < 24;
   }
   function recordTrail() {
     const p = { x: W * x / 100, y: H * y / 100 };
@@ -421,7 +444,7 @@
       const lateral = index === 0 ? -18 : index === 1 ? 18 : 0;
       const target = safeNear({ x: anchor.x + lateral, y: anchor.y }, pointOf(actor.sprite)) || anchor;
       const gap = distance(pointOf(actor.sprite), target);
-      const speed = SPEED[id] * (gap > 240 ? 2.8 : gap > 135 ? 2.1 : gap > 75 ? 1.55 : 1.2);
+      const speed = SPEED[id] * (gap > 240 ? 1.7 : gap > 135 ? 1.4 : gap > 75 ? 1.18 : 1.05);
       moveActor(actor, target, dt, speed);
       actor.sprite.setDepth(9 + actor.sprite.y / 1000);
     });
