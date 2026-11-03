@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.5
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.6
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -234,51 +234,89 @@
     }
     return safeNear(trail[0], { x: W * x / 100, y: H * y / 100 }) || trail[0];
   }
+  // On-screen diagnostics so errors are visible on iPhone without devtools.
+  function switchNotice(message, error) {
+    let panel = document.getElementById("bs-switch-diagnostic");
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "bs-switch-diagnostic";
+      panel.style.cssText = "position:fixed;left:12px;top:18%;z-index:99999;max-width:80vw;padding:10px 14px;border:1px solid #d69eae;border-radius:8px;background:#15151eea;color:#fff;font:14px system-ui;pointer-events:none;white-space:pre-wrap";
+      document.body.appendChild(panel);
+    }
+    panel.textContent = message + (error ? "\n" + (error.message || String(error)) : "");
+    console.warn("[BLACK SERIES switch]", message, error || "");
+  }
+
   function switchTo(id) {
     if (ROOF.phase !== "party" || !IDS.includes(id) || fighting || BSDialogue.active) return false;
     const scene = ROOF.scene;
     const current = scene.heroName;
     if (current === id) return true;
     const next = ROOF.members[id], old = ROOF.members[current];
-    if (!next || !old || !scene.heroSprite) return false;
-
-    // A follower can stand just inside an obstacle margin. Never abort the
-    // whole swap: find the closest legal point before changing any sprites.
+    if (!next || !old || !scene.heroSprite) {
+      switchNotice("切替失敗：キャラクター情報がありません");
+      return false;
+    }
     const oldPosition = { x: W * x / 100, y: H * y / 100 };
     const requested = pointOf(next.sprite);
     const nextPosition = canStand(requested.x, requested.y)
       ? requested : safeNear(requested, oldPosition);
-    if (!nextPosition) return false;
-
-    // Prepare the former leader before making it visible as a follower.
-    old.dir = facing;
-    old.sprite.setPosition(oldPosition.x, oldPosition.y);
-    setActorAnimation(current, old.sprite, false, old.dir);
-
-    // Swap the canonical hero first, then reveal exactly one follower for
-    // every non-active character. This prevents duplicate KINGMAKER renders.
-    scene.heroName = id;
-    scene.currentAnimation = "";
-    x = nextPosition.x / W * 100;
-    y = nextPosition.y / H * 100;
-    facing = next.dir || "front";
-    scene.heroSprite.setVisible(true);
-    scene.refreshHero(false);
-    for (const memberId of IDS) {
-      const actor = ROOF.members[memberId];
-      actor.sprite.setVisible(memberId !== id);
-      actor.label.setVisible(false);
-      actor.path = [];
-      actor.repath = 0;
-      actor.stuck = 0;
-      actor.speed = 0;
-      actor.walking = false;
-      actor.animHold = 0;
+    if (!nextPosition) {
+      switchNotice("切替失敗：移動先が見つかりません");
+      return false;
     }
-    ROOF.trail = [{ x: W * x / 100, y: H * y / 100 }];
-    const hud = document.getElementById("hudName");
-    if (hud) hud.textContent = NAMES[id];
-    return true;
+    const previousFacing = facing;
+    const hero = scene.heroSprite;
+    try {
+      // Commit the new playable hero before revealing the former leader.
+      scene.heroName = id;
+      scene.currentAnimation = "";
+      x = nextPosition.x / W * 100;
+      y = nextPosition.y / H * 100;
+      facing = next.dir || "front";
+      hero.setVisible(true);
+      scene.refreshHero(false);
+
+      // Validate that the actual hero animation changed as requested.
+      const expected = `${id}_idle_${facing}`;
+      if (hero.anims.currentAnim?.key !== expected) {
+        hero.play(expected, true);
+      }
+
+      old.dir = previousFacing;
+      old.sprite.setPosition(oldPosition.x, oldPosition.y);
+      setActorAnimation(current, old.sprite, false, old.dir);
+      for (const memberId of IDS) {
+        const actor = ROOF.members[memberId];
+        actor.sprite.setVisible(memberId !== id);
+        actor.label.setVisible(false);
+        actor.path = [];
+        actor.repath = 0;
+        actor.stuck = 0;
+        actor.speed = 0;
+        actor.walking = false;
+        actor.animHold = 0;
+      }
+      ROOF.trail = [{ x: W * x / 100, y: H * y / 100 }];
+      const hud = document.getElementById("hudName");
+      if (hud) hud.textContent = NAMES[id];
+      const diagnostic = document.getElementById("bs-switch-diagnostic");
+      if (diagnostic) diagnostic.remove();
+      return true;
+    } catch (error) {
+      // Roll back every visible element, preventing a second KINGMAKER.
+      scene.heroName = current;
+      scene.currentAnimation = "";
+      x = oldPosition.x / W * 100;
+      y = oldPosition.y / H * 100;
+      facing = previousFacing;
+      try { scene.refreshHero(false); } catch (_) {}
+      for (const memberId of IDS) {
+        try { ROOF.members[memberId].sprite.setVisible(memberId !== current); } catch (_) {}
+      }
+      switchNotice(`切替エラー ${current} → ${id}`, error);
+      return false;
+    }
   }
   function cycle() {
     const i = IDS.indexOf(ROOF.scene.heroName);
