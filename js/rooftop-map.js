@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.3
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.4
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -168,70 +168,77 @@
     sprite.setScale(base * width, base).setOrigin(.5, FOOT[id][mode] / 160);
   }
   function pointOf(sprite) { return { x: sprite.x, y: sprite.y }; }
-  // Smooth pursuit: stable targets, path reuse, speed easing and animation hysteresis.
+  // Stable follow movement: smooth speed, no teleport, fewer animation resets.
   function moveActor(actor, desired, dt, maxSpeed) {
     const sprite = actor.sprite;
     const start = pointOf(sprite);
-    const valid = canStand(desired.x, desired.y) ? desired : safeNear(desired, start);
-    if (!valid) return false;
+    const target = canStand(desired.x, desired.y)
+      ? desired : safeNear(desired, start);
+    if (!target) {
+      setActorAnimation(actor.id, sprite, false, actor.dir);
+      return false;
+    }
 
-    // Filter small target fluctuations so the follower does not zigzag.
-    if (!actor.filteredTarget) actor.filteredTarget = { ...valid };
-    const blend = Math.min(1, dt * 5);
-    const smoothed = {
-      x: actor.filteredTarget.x + (valid.x - actor.filteredTarget.x) * blend,
-      y: actor.filteredTarget.y + (valid.y - actor.filteredTarget.y) * blend
-    };
-    actor.filteredTarget = canStand(smoothed.x, smoothed.y) ? smoothed : { ...valid };
-    const target = actor.filteredTarget;
     const gap = distance(start, target);
-    const stopRadius = 17;
-    const resumeRadius = 27;
-    actor.walking = actor.walking ? gap > stopRadius : gap > resumeRadius;
+    const stopAt = 13;
+    const resumeAt = 21;
+    actor.walking = actor.walking ? gap > stopAt : gap > resumeAt;
+    if (!actor.walking) {
+      actor.speed = 0;
+      actor.path = [];
+      actor.animHold = Math.max(0, (actor.animHold || 0) - dt);
+      setActorAnimation(actor.id, sprite, actor.animHold > 0, actor.dir);
+      return gap < resumeAt;
+    }
 
     actor.repath = (actor.repath || 0) - dt;
-    if (!actor.path) actor.path = [];
-    // Prefer a direct path; recompute a detour only when necessary.
     const direct = clearPath(start, target);
     if (direct) {
       actor.path = [target];
-      actor.goal = { ...target };
-      actor.repath = .65;
-    } else if (!actor.path.length || actor.repath <= 0 ||
-               distance(actor.goal || start, target) > 65) {
+      actor.goal = { x: target.x, y: target.y };
+      actor.repath = .55;
+    } else if (!actor.path?.length || actor.repath <= 0 ||
+               distance(actor.goal || start, target) > 48) {
       actor.path = pathTo(start, target);
-      actor.goal = { ...target };
-      actor.repath = .65;
+      actor.goal = { x: target.x, y: target.y };
+      actor.repath = .45;
     }
-    while (actor.path.length > 1 && distance(start, actor.path[0]) < 15) actor.path.shift();
-    const aim = actor.path[0];
+
+    while (actor.path?.length > 1 &&
+           distance(start, actor.path[0]) < 14) actor.path.shift();
+
+    const aim = actor.path?.[0];
     let moved = false;
-    if (actor.walking && aim) {
+    if (aim) {
       const dx = aim.x - sprite.x, dy = aim.y - sprite.y;
       const len = Math.hypot(dx, dy);
       if (len > .01) {
-        // Only moderate catch-up, with eased acceleration/deceleration.
-        const desiredSpeed = Math.min(maxSpeed, maxSpeed * Math.min(1, Math.max(.35, (gap - stopRadius) / 65)));
-        actor.speed = (actor.speed || 0) + (desiredSpeed - (actor.speed || 0)) * Math.min(1, dt * 4.5);
+        const desiredSpeed = maxSpeed * Math.min(1, Math.max(.48, (gap - stopAt) / 75));
+        actor.speed = (actor.speed || 0) +
+          (desiredSpeed - (actor.speed || 0)) * Math.min(1, dt * 5);
         const step = Math.min(len, actor.speed * dt);
-        const next = { x: sprite.x + dx / len * step, y: sprite.y + dy / len * step };
-        if (step > .03 && clearPath(start, next)) {
+        const next = {
+          x: sprite.x + dx / len * step,
+          y: sprite.y + dy / len * step
+        };
+        if (step > .02 && clearPath(start, next)) {
           sprite.setPosition(next.x, next.y);
           actor.dir = Math.abs(dx) >= Math.abs(dy)
-            ? (dx < 0 ? "left" : "right") : (dy < 0 ? "back" : "front");
+            ? (dx < 0 ? "left" : "right")
+            : (dy < 0 ? "back" : "front");
           moved = true;
         }
       }
     }
-    if (!moved) {
-      actor.speed = Math.max(0, (actor.speed || 0) - 240 * dt);
-      actor.stuck = (actor.stuck || 0) + dt;
-      if (actor.walking && actor.stuck > .45) actor.repath = 0;
-    } else actor.stuck = 0;
-    // No teleporting: keep trying alternate paths on the next update.
-    actor.animHold = moved ? .14 : Math.max(0, (actor.animHold || 0) - dt);
-    setActorAnimation(actor.id, sprite, moved || (actor.walking && actor.animHold > 0), actor.dir);
-    return distance(pointOf(sprite), valid) < resumeRadius;
+
+    actor.stuck = moved ? 0 : (actor.stuck || 0) + dt;
+    if (!moved && actor.stuck > .35) {
+      actor.repath = 0;
+      actor.path = [];
+    }
+    actor.animHold = moved ? .18 : Math.max(0, (actor.animHold || 0) - dt);
+    setActorAnimation(actor.id, sprite, moved || actor.animHold > 0, actor.dir);
+    return distance(pointOf(sprite), target) < resumeAt;
   }
   function recordTrail() {
     const p = { x: W * x / 100, y: H * y / 100 };
@@ -267,8 +274,6 @@
     old.sprite.setPosition(oldPosition.x, oldPosition.y).setVisible(true);
     old.label.setPosition(oldPosition.x, oldPosition.y + 10).setVisible(false);
     old.dir = facing;
-    old.path = []; old.filteredTarget = null; old.speed = 0; old.walking = false;
-    next.path = []; next.filteredTarget = null; next.speed = 0; next.walking = false;
     setActorAnimation(current, old.sprite, false, old.dir);
     next.sprite.setVisible(false);
     next.label.setVisible(false);
@@ -279,7 +284,7 @@
     facing = next.dir;
     scene.refreshHero(false);
     ROOF.trail = [{ x: W * x / 100, y: H * y / 100 }];
-    for (const actor of Object.values(ROOF.members)) { actor.path = []; actor.repath = 0; actor.stuck = 0; }
+    for (const actor of Object.values(ROOF.members)) { actor.path = []; actor.repath = 0; actor.stuck = 0; actor.speed = 0; actor.walking = false; actor.animHold = 0; }
     const hud = document.getElementById("hudName");
     if (hud) hud.textContent = NAMES[id];
     return true;
@@ -384,7 +389,7 @@
       const actor = ROOF.members[id];
       // Trail-following plus lateral offset produces a loose, readable party.
       const anchor = trailTarget(SPACING * (index + 1));
-      const lateral = index === 0 ? -12 : index === 1 ? 12 : 0;
+      const lateral = index === 0 ? -18 : index === 1 ? 18 : 0;
       const target = safeNear({ x: anchor.x + lateral, y: anchor.y }, pointOf(actor.sprite)) || anchor;
       const gap = distance(pointOf(actor.sprite), target);
       const speed = SPEED[id] * (gap > 240 ? 1.65 : gap > 135 ? 1.4 : gap > 75 ? 1.2 : 1.05);
