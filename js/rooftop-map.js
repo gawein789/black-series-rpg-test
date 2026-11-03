@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.4
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.5
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -168,77 +168,51 @@
     sprite.setScale(base * width, base).setOrigin(.5, FOOT[id][mode] / 160);
   }
   function pointOf(sprite) { return { x: sprite.x, y: sprite.y }; }
-  // Stable follow movement: smooth speed, no teleport, fewer animation resets.
   function moveActor(actor, desired, dt, maxSpeed) {
     const sprite = actor.sprite;
     const start = pointOf(sprite);
-    const target = canStand(desired.x, desired.y)
-      ? desired : safeNear(desired, start);
-    if (!target) {
-      setActorAnimation(actor.id, sprite, false, actor.dir);
-      return false;
-    }
-
-    const gap = distance(start, target);
-    const stopAt = 13;
-    const resumeAt = 21;
-    actor.walking = actor.walking ? gap > stopAt : gap > resumeAt;
-    if (!actor.walking) {
-      actor.speed = 0;
+    const target = safeNear(desired, start);
+    if (!target) { setActorAnimation(actor.id, sprite, false, actor.dir); return false; }
+    if (distance(start, target) < 11) {
       actor.path = [];
-      actor.animHold = Math.max(0, (actor.animHold || 0) - dt);
-      setActorAnimation(actor.id, sprite, actor.animHold > 0, actor.dir);
-      return gap < resumeAt;
+      actor.stuck = 0;
+      setActorAnimation(actor.id, sprite, false, actor.dir);
+      return true;
     }
-
     actor.repath = (actor.repath || 0) - dt;
-    const direct = clearPath(start, target);
-    if (direct) {
-      actor.path = [target];
-      actor.goal = { x: target.x, y: target.y };
-      actor.repath = .55;
-    } else if (!actor.path?.length || actor.repath <= 0 ||
-               distance(actor.goal || start, target) > 48) {
+    if (!actor.path.length || actor.repath <= 0 || distance(actor.goal || start, target) > 16) {
       actor.path = pathTo(start, target);
-      actor.goal = { x: target.x, y: target.y };
-      actor.repath = .45;
+      actor.goal = { ...target };
+      actor.repath = .20;
     }
-
-    while (actor.path?.length > 1 &&
-           distance(start, actor.path[0]) < 14) actor.path.shift();
-
-    const aim = actor.path?.[0];
+    while (actor.path.length > 1 && distance(start, actor.path[0]) < 10) actor.path.shift();
+    const aim = actor.path[0];
     let moved = false;
     if (aim) {
       const dx = aim.x - sprite.x, dy = aim.y - sprite.y;
-      const len = Math.hypot(dx, dy);
-      if (len > .01) {
-        const desiredSpeed = maxSpeed * Math.min(1, Math.max(.48, (gap - stopAt) / 75));
-        actor.speed = (actor.speed || 0) +
-          (desiredSpeed - (actor.speed || 0)) * Math.min(1, dt * 5);
-        const step = Math.min(len, actor.speed * dt);
-        const next = {
-          x: sprite.x + dx / len * step,
-          y: sprite.y + dy / len * step
-        };
-        if (step > .02 && clearPath(start, next)) {
+      const length = Math.hypot(dx, dy);
+      if (length > .01) {
+        const step = Math.min(length, maxSpeed * dt);
+        const next = { x: sprite.x + dx / length * step, y: sprite.y + dy / length * step };
+        if (step > .05 && clearPath(start, next)) {
           sprite.setPosition(next.x, next.y);
-          actor.dir = Math.abs(dx) >= Math.abs(dy)
-            ? (dx < 0 ? "left" : "right")
-            : (dy < 0 ? "back" : "front");
+          actor.dir = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? "left" : "right") : (dy < 0 ? "back" : "front");
           moved = true;
         }
       }
     }
-
     actor.stuck = moved ? 0 : (actor.stuck || 0) + dt;
-    if (!moved && actor.stuck > .35) {
-      actor.repath = 0;
-      actor.path = [];
+    if (!moved) actor.repath = 0;
+    // Recover from blocked routes without leaving a member frozen forever.
+    if (actor.stuck > 1.2 && distance(start, target) > 90) {
+      const recovery = safeNear({ x: target.x - 28, y: target.y + 22 }, start);
+      if (recovery && clearPath(target, recovery)) {
+        sprite.setPosition(recovery.x, recovery.y);
+        actor.path = []; actor.stuck = 0; actor.repath = 0;
+      }
     }
-    actor.animHold = moved ? .18 : Math.max(0, (actor.animHold || 0) - dt);
-    setActorAnimation(actor.id, sprite, moved || actor.animHold > 0, actor.dir);
-    return distance(pointOf(sprite), target) < resumeAt;
+    setActorAnimation(actor.id, sprite, moved, actor.dir);
+    return distance(pointOf(sprite), target) < 11;
   }
   function recordTrail() {
     const p = { x: W * x / 100, y: H * y / 100 };
@@ -265,26 +239,43 @@
     const scene = ROOF.scene;
     const current = scene.heroName;
     if (current === id) return true;
-    const next = ROOF.members[id];
-    const old = ROOF.members[current];
-    if (!next || !old) return false;
+    const next = ROOF.members[id], old = ROOF.members[current];
+    if (!next || !old || !scene.heroSprite) return false;
+
+    // A follower can stand just inside an obstacle margin. Never abort the
+    // whole swap: find the closest legal point before changing any sprites.
     const oldPosition = { x: W * x / 100, y: H * y / 100 };
-    const nextPosition = pointOf(next.sprite);
-    if (!canStand(nextPosition.x, nextPosition.y)) return false;
-    old.sprite.setPosition(oldPosition.x, oldPosition.y).setVisible(true);
-    old.label.setPosition(oldPosition.x, oldPosition.y + 10).setVisible(false);
+    const requested = pointOf(next.sprite);
+    const nextPosition = canStand(requested.x, requested.y)
+      ? requested : safeNear(requested, oldPosition);
+    if (!nextPosition) return false;
+
+    // Prepare the former leader before making it visible as a follower.
     old.dir = facing;
+    old.sprite.setPosition(oldPosition.x, oldPosition.y);
     setActorAnimation(current, old.sprite, false, old.dir);
-    next.sprite.setVisible(false);
-    next.label.setVisible(false);
+
+    // Swap the canonical hero first, then reveal exactly one follower for
+    // every non-active character. This prevents duplicate KINGMAKER renders.
     scene.heroName = id;
     scene.currentAnimation = "";
     x = nextPosition.x / W * 100;
     y = nextPosition.y / H * 100;
-    facing = next.dir;
+    facing = next.dir || "front";
+    scene.heroSprite.setVisible(true);
     scene.refreshHero(false);
+    for (const memberId of IDS) {
+      const actor = ROOF.members[memberId];
+      actor.sprite.setVisible(memberId !== id);
+      actor.label.setVisible(false);
+      actor.path = [];
+      actor.repath = 0;
+      actor.stuck = 0;
+      actor.speed = 0;
+      actor.walking = false;
+      actor.animHold = 0;
+    }
     ROOF.trail = [{ x: W * x / 100, y: H * y / 100 }];
-    for (const actor of Object.values(ROOF.members)) { actor.path = []; actor.repath = 0; actor.stuck = 0; actor.speed = 0; actor.walking = false; actor.animHold = 0; }
     const hud = document.getElementById("hudName");
     if (hud) hud.textContent = NAMES[id];
     return true;
@@ -392,7 +383,7 @@
       const lateral = index === 0 ? -18 : index === 1 ? 18 : 0;
       const target = safeNear({ x: anchor.x + lateral, y: anchor.y }, pointOf(actor.sprite)) || anchor;
       const gap = distance(pointOf(actor.sprite), target);
-      const speed = SPEED[id] * (gap > 240 ? 1.65 : gap > 135 ? 1.4 : gap > 75 ? 1.2 : 1.05);
+      const speed = SPEED[id] * (gap > 240 ? 2.8 : gap > 135 ? 2.1 : gap > 75 ? 1.55 : 1.2);
       moveActor(actor, target, dt, speed);
       actor.sprite.setDepth(9 + actor.sprite.y / 1000);
     });
@@ -413,6 +404,7 @@
       button.txt?.setVisible(false).disableInteractive();
     }
     scene.followerSprite?.setVisible(false);
+    scene.followerSprite = null;
     // Prevent legacy Leviathan follower logic from running on the rooftop.
     scene.update = function () {};
     // Keep the existing sprites and all animation keys; never recreate PNG textures.
