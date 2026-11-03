@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.10 (visual polish; gameplay unchanged)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.11 (photo-aligned walkable roof boundary)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -26,8 +26,23 @@
   const originalTryMove = window.BSTryMove;
 
   function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  // Photo-aligned walkable region (900x506 game coordinates).
+  // Keep the crew spawn points, stair entrance, and the existing obstacles valid.
+  // This is deliberately conservative: do not walk onto the left wall or
+  // beyond the distant/right-hand railing visible in the rooftop photograph.
+  function insideRoofPhoto(px, py) {
+    if (px < 48 || px > 844 || py < 150 || py > 456) return false;
+    // Left corrugated utility-room wall: its facade occupies the upper-left.
+    if (py < 315 && px < 207) return false;
+    // At the lower left, the near equipment and edge leave a narrow corridor.
+    if (py >= 315 && px < 72) return false;
+    // Far right railing recedes toward the horizon (conservative clearance).
+    const rightLimit = py < 230 ? 765 : py < 315 ? 765 + (py - 230) * .72 : 826;
+    if (px > rightLimit) return false;
+    return true;
+  }
   function canStand(px, py) {
-    return px >= 47 && px <= 853 && py >= 112 && py <= 456 &&
+    return insideRoofPhoto(px, py) &&
       (typeof BSCanStand !== "function" || BSCanStand(px, py));
   }
   // The player and the followers must share exactly the same walkable roof.
