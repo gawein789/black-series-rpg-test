@@ -1,14 +1,15 @@
 
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.1
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.2
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
   const IDS = ["kingmaker", "lucifer", "lilith", "goliath"];
   const NAMES = { kingmaker: "キングメイカー", lucifer: "ルシファー", lilith: "リリス", goliath: "ゴライアス" };
-  const SPEED = { kingmaker: 125, lucifer: 115, lilith: 115, goliath: 115 }; // provisional follower px/sec
-  const SPACING = 55;
+  const SPEED = { kingmaker: 125, lucifer: 125, lilith: 125, goliath: 125 }; // follower px/sec
+  const SPACING = 54;
   const LEADER_SPEED = { kingmaker: 1.25, lucifer: 1, lilith: 1, goliath: 1 };
+  const RALLY_LIMIT = 4;
   const CREW = [
     { id: "lucifer", x: 260, y: 163 },
     { id: "lilith", x: 653, y: 173 },
@@ -23,13 +24,43 @@
   const WALK_WIDTH = { kingmaker: { right: 1.10 } };
   const oldInteract = window.interact;
   const oldSwitch = window.switchCharacter;
-  const oldMove = window.BSTryMove;
+  const originalTryMove = window.BSTryMove;
 
   function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
   function canStand(px, py) {
     return px >= 47 && px <= 853 && py >= 112 && py <= 456 &&
       (typeof BSCanStand !== "function" || BSCanStand(px, py));
   }
+
+  // The player and the followers must share exactly the same walkable roof.
+  function guardedTryMove(dx, dy) {
+    const beforeX = x, beforeY = y;
+    if (typeof originalTryMove !== "function") return false;
+    const result = originalTryMove(dx, dy);
+    const after = { x: W * x / 100, y: H * y / 100 };
+    if (!canStand(after.x, after.y)) {
+      x = beforeX; y = beforeY;
+      return false;
+    }
+    return result === undefined ? (x !== beforeX || y !== beforeY) : result;
+  }
+
+  function safeNear(target, origin) {
+    if (canStand(target.x, target.y)) return target;
+    for (let r = 12; r <= 96; r += 12) {
+      let best = null, bestDist = Infinity;
+      for (let k = 0; k < 16; k++) {
+        const a = k * Math.PI / 8;
+        const p = { x: target.x + Math.cos(a) * r, y: target.y + Math.sin(a) * r };
+        if (!canStand(p.x, p.y)) continue;
+        const d = distance(origin, p);
+        if (d < bestDist) { best = p; bestDist = d; }
+      }
+      if (best) return best;
+    }
+    return null;
+  }
+
   function clearPath(a, b) {
     const count = Math.max(1, Math.ceil(distance(a, b) / 7));
     for (let i = 1; i <= count; i++) {
@@ -38,6 +69,7 @@
     }
     return true;
   }
+
   function pathTo(a, b) {
     if (!canStand(b.x, b.y)) return [];
     if (clearPath(a, b)) return [b];
@@ -126,17 +158,18 @@
     ROOF.scene.bsObjective.setText(msg);
     ROOF.scene.bsExitLabel.setVisible(ROOF.phase === "party");
   }
+
   function dialogue(lines, done) {
     if (typeof BSStartDialogue !== "function") return;
     ROOF.pending = done || null;
     ROOF.waiting = true;
     BSStartDialogue(lines);
   }
+
   function setActorAnimation(id, sprite, moving, dir) {
     const mode = moving ? "walk" : "idle";
     const key = `${id}_${mode}_${dir}`;
     if (sprite.anims.currentAnim?.key !== key) sprite.play(key, true);
-    
     const base = SCALE[id] * HEIGHTS.idle / HEIGHTS[mode] * (mode === "idle" ? (CORRECTION[id] || 1) : 1);
     const width = mode === "walk" ? (WALK_WIDTH[id]?.[dir] || 1) : 1;
     sprite.setScale(base * width, base).setOrigin(.5, FOOT[id][mode] / 160);
@@ -152,6 +185,7 @@
     const dist = distance(start, target);
 
     if (dist < 10) {
+      actor.stuck = 0;
       setActorAnimation(actor.id, sprite, false, actor.dir);
       return true;
     }
@@ -161,11 +195,11 @@
     if (
       !actor.path.length ||
       actor.repath <= 0 ||
-      distance(actor.goal || start, target) > 28
+      distance(actor.goal || start, target) > 20
     ) {
       actor.path = pathTo(start, target);
       actor.goal = { x: target.x, y: target.y };
-      actor.repath = .28;
+      actor.repath = .20;
     }
 
     while (actor.path.length && distance(start, actor.path[0]) < 9) {
@@ -175,6 +209,8 @@
     const aim = actor.path[0];
 
     if (!aim) {
+      actor.stuck = (actor.stuck || 0) + dt;
+      actor.repath = 0;
       setActorAnimation(actor.id, sprite, false, actor.dir);
       return false;
     }
@@ -182,13 +218,13 @@
     const dx = aim.x - sprite.x;
     const dy = aim.y - sprite.y;
     const length = Math.hypot(dx, dy);
-    const step = Math.min(length, maxSpeed * dt);
 
     if (length < .001) {
       actor.path.shift();
       return false;
     }
 
+    const step = Math.min(length, maxSpeed * dt);
     const nx = sprite.x + dx / length * step;
     const ny = sprite.y + dy / length * step;
     const moving = step > .08 &&
@@ -199,7 +235,9 @@
       actor.dir = Math.abs(dx) >= Math.abs(dy)
         ? (dx < 0 ? "left" : "right")
         : (dy < 0 ? "back" : "front");
+      actor.stuck = 0;
     } else {
+      actor.stuck = (actor.stuck || 0) + dt;
       actor.repath = 0;
     }
 
@@ -210,83 +248,45 @@
   function recordTrail() {
     const p = { x: W * x / 100, y: H * y / 100 };
     const trail = ROOF.trail;
-
-    if (
-      !trail.length ||
-      distance(trail[trail.length - 1], p) > 2
-    ) {
-      trail.push(p);
-    }
-
-    if (trail.length > 1300) {
-      trail.splice(0, trail.length - 1300);
-    }
+    if (!trail.length || distance(trail[trail.length - 1], p) > 2) trail.push(p);
+    if (trail.length > 1300) trail.splice(0, trail.length - 1300);
   }
 
   function trailTarget(behind) {
     const trail = ROOF.trail;
-
-    if (!trail.length) {
-      return { x: W * x / 100, y: H * y / 100 };
-    }
-
+    if (!trail.length) return { x: W * x / 100, y: H * y / 100 };
     let left = behind;
-
     for (let i = trail.length - 1; i > 0; i--) {
-      const a = trail[i];
-      const b = trail[i - 1];
+      const a = trail[i], b = trail[i - 1];
       const length = distance(a, b);
-
       if (length >= left) {
         const t = length ? left / length : 0;
-        return {
-          x: a.x + (b.x - a.x) * t,
-          y: a.y + (b.y - a.y) * t
-        };
+        return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
       }
-
       left -= length;
     }
-
     return trail[0];
   }
 
   function switchTo(id) {
-    if (
-      ROOF.phase !== "party" ||
-      !IDS.includes(id) ||
-      fighting ||
-      BSDialogue.active
-    ) {
-      return false;
-    }
+    if (ROOF.phase !== "party" || !IDS.includes(id) || fighting || BSDialogue.active) return false;
 
     const scene = ROOF.scene;
     const current = scene.heroName;
-
     if (current === id) return true;
 
-    const next = ROOF.members[id];
-    const old = ROOF.members[current];
-
+    const next = ROOF.members[id], old = ROOF.members[current];
     if (!next || !old) return false;
 
-    const oldPosition = {
-      x: W * x / 100,
-      y: H * y / 100
-    };
-
+    const oldPosition = { x: W * x / 100, y: H * y / 100 };
     const nextPosition = pointOf(next.sprite);
 
-    // Keep the previous leader at the exact handover position.
-    old.sprite
-      .setPosition(oldPosition.x, oldPosition.y)
-      .setVisible(true);
-
+    old.sprite.setPosition(oldPosition.x, oldPosition.y).setVisible(true);
     old.label.setVisible(false);
     old.dir = facing;
-
-    // Important: apply the normal display scale before showing.
+    old.path = [];
+    old.repath = 0;
+    old.stuck = 0;
     setActorAnimation(current, old.sprite, false, old.dir);
 
     next.sprite.setVisible(false);
@@ -294,26 +294,17 @@
 
     scene.heroName = id;
     scene.currentAnimation = "";
-
     x = nextPosition.x / W * 100;
     y = nextPosition.y / H * 100;
     facing = next.dir;
-
     scene.refreshHero(false);
 
-    // Reset the party trail after switching leaders.
-    ROOF.trail = [{
-      x: W * x / 100,
-      y: H * y / 100
-    }];
+    ROOF.trail = [{ x: W * x / 100, y: H * y / 100 }];
 
-    // Keep the hidden development selector synchronized.
     const selector = document.getElementById("characterSelect");
-    if (selector) selector.value = id;
-
+    if (selector && [...selector.options].some(o => o.value === id)) selector.value = id;
     const hud = document.getElementById("hudName");
     if (hud) hud.textContent = NAMES[id];
-
     return true;
   }
 
@@ -325,30 +316,18 @@
   function interactRoof() {
     if (!ROOF.active) return oldInteract?.();
     if (fighting) return;
-
-    if (BSDialogue.active) {
-      BSAdvanceDialogue();
-      return;
-    }
+    if (BSDialogue.active) { BSAdvanceDialogue(); return; }
 
     const p = { x: W * x / 100, y: H * y / 100 };
 
     if (ROOF.phase === "scout") {
-      let closest = null;
-      let best = 86;
-
+      let closest = null, best = 86;
       for (const c of CREW) {
         const d = distance(p, c);
-
-        if (d < best) {
-          best = d;
-          closest = c;
-        }
+        if (d < best) { best = d; closest = c; }
       }
-
       if (closest) {
         const id = closest.id;
-
         const lines = id === "lucifer" ? [
           { speaker: "ルシファー", text: "事前情報では二十人前後でした。" },
           { speaker: "ルシファー", text: "見えるだけで、それ以上いますね。" },
@@ -361,40 +340,27 @@
           { speaker: "ゴライアス", text: "裏口に車が三台。" },
           { speaker: "ゴライアス", text: "非戦闘員は中央から離れている。" }
         ];
-
         dialogue(lines, () => {
           ROOF.found[id] = true;
-
           if (CREW.every(c => ROOF.found[c.id])) {
             ROOF.phase = "rally";
-            ROOF.rallyStarted = false;
             ROOF.rallyElapsed = 0;
           }
-
           objective();
         });
-
         return;
       }
-
-      dialogue([{
-        speaker: "探索",
-        text: "仲間から偵察情報を集めよう。"
-      }]);
+      dialogue([{ speaker: "探索", text: "仲間から偵察情報を集めよう。" }]);
       return;
     }
 
     if (ROOF.phase === "rally") {
-      dialogue([{
-        speaker: "探索",
-        text: "仲間が集合している。"
-      }]);
+      dialogue([{ speaker: "探索", text: "仲間が集合している。" }]);
       return;
     }
 
     if (distance(p, EXIT) < 92) {
       dialogue([
-        
         { speaker: "キングメイカー", text: "確認してから入る。" },
         { speaker: "キングメイカー", text: "始めるぞ。" },
         { speaker: "SYSTEM", text: "屋上偵察完了。次の倉庫潜入マップは今後実装予定です。" }
@@ -402,20 +368,12 @@
       return;
     }
 
-    dialogue([
-      { speaker: "探索", text: "雨に濡れた屋上から、港の灯りが見える。" }
-    ]);
+    dialogue([{ speaker: "探索", text: "雨に濡れた屋上から、港の灯りが見える。" }]);
   }
 
   function finishRally() {
     ROOF.phase = "party";
-
-    const leader = {
-      x: W * x / 100,
-      y: H * y / 100
-    };
-
-    ROOF.trail = [leader];
+    ROOF.trail = [{ x: W * x / 100, y: H * y / 100 }];
 
     for (const c of CREW) {
       ROOF.members[c.id].label.setVisible(false);
@@ -448,29 +406,28 @@
 
     const dt = Math.min(delta / 1000, .05);
     const scene = ROOF.scene;
+    const leader = {
+      x: W * x / 100,
+      y: H * y / 100
+    };
 
     if (ROOF.phase === "rally") {
       ROOF.rallyElapsed = (ROOF.rallyElapsed || 0) + dt;
 
-      const leader = {
-        x: W * x / 100,
-        y: H * y / 100
-      };
-
-      const positions = [
-        { x: leader.x - 42, y: leader.y + 48 },
-        { x: leader.x + 42, y: leader.y + 48 },
-        { x: leader.x, y: leader.y + 85 }
+      const slots = [
+        { x: leader.x - 45, y: leader.y + 45 },
+        { x: leader.x + 45, y: leader.y + 45 },
+        { x: leader.x, y: leader.y + 76 }
       ];
 
       let all = true;
 
       CREW.forEach((c, i) => {
         const actor = ROOF.members[c.id];
-        const goal = positions[i];
-        const safeGoal = canStand(goal.x, goal.y) ? goal : leader;
+        const goal =
+          safeNear(slots[i], pointOf(actor.sprite)) || leader;
 
-        if (!moveActor(actor, safeGoal, dt, SPEED[c.id])) {
+        if (!moveActor(actor, goal, dt, SPEED[c.id] * 1.8)) {
           all = false;
         }
 
@@ -480,8 +437,7 @@
         );
       });
 
-      // Avoid a long wait if an actor cannot reach the exact slot.
-      if (all || ROOF.rallyElapsed >= 8) {
+      if (all || ROOF.rallyElapsed >= RALLY_LIMIT) {
         finishRally();
       }
 
@@ -496,12 +452,26 @@
 
     others.forEach((id, index) => {
       const actor = ROOF.members[id];
-      const target = trailTarget(SPACING * (index + 1));
+
+      // Follow the leader's route with a loose formation.
+      const anchor = trailTarget(SPACING * (index + 1));
+
+      const lateral =
+        index === 0 ? -18 :
+        index === 1 ? 18 : 0;
+
+      const target = safeNear(
+        { x: anchor.x + lateral, y: anchor.y },
+        pointOf(actor.sprite)
+      ) || anchor;
+
       const gap = distance(pointOf(actor.sprite), target);
 
+      // Catch up faster when separated from the party.
       const speed = SPEED[id] * (
-        gap > 165 ? 1.75 :
-        gap > 95 ? 1.35 : 1
+        gap > 240 ? 2.8 :
+        gap > 135 ? 2.1 :
+        gap > 75 ? 1.55 : 1.2
       );
 
       moveActor(actor, target, dt, speed);
@@ -542,25 +512,25 @@
 
     scene.followerSprite?.setVisible(false);
 
-    // Disable the old two-character follower on this map.
+    // Disable the previous two-character follower logic.
     scene.update = function () {};
 
-    // Preserve the existing sprite sheets and animation corrections.
+    // Reuse existing character sprites and animations.
     for (const c of CREW) {
-      const member = scene.summitMembers[c.id];
+      const m = scene.summitMembers[c.id];
 
-      member.sprite
+      m.sprite
         .setPosition(c.x, c.y)
         .setVisible(true);
 
-      member.label
+      m.label
         .setPosition(c.x, c.y + 10)
         .setVisible(true);
 
       ROOF.members[c.id] = {
         id: c.id,
-        sprite: member.sprite,
-        label: member.label,
+        sprite: m.sprite,
+        label: m.label,
         dir: "front",
         path: [],
         goal: null,
@@ -586,7 +556,7 @@
       repath: 0
     };
 
-    // Ensure KINGMAKER follower uses the same scale as the hero.
+    // Prevent the duplicate KINGMAKER from appearing oversized.
     setActorAnimation(
       "kingmaker",
       kingSprite,
@@ -648,6 +618,9 @@
     const footer = document.querySelector("#game > p");
     if (footer) footer.style.display = "none";
 
+    // Apply the same roof boundaries to the playable character.
+    window.BSTryMove = guardedTryMove;
+
     window.BSGetLeaderSpeed = () =>
       LEADER_SPEED[scene.heroName] || 1;
 
@@ -661,7 +634,10 @@
     scene.events.on("update", tick);
 
     dialogue([
-      { speaker: "キングメイカー", text: "……多いな。" },
+      {
+        speaker: "キングメイカー",
+        text: "……多いな。"
+      },
       {
         speaker: "SYSTEM",
         text: "仲間の3人に近づき、「調べる」で偵察情報を確認しよう。"
