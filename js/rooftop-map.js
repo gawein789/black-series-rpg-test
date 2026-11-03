@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.8 (initial HUD label fix)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.9 (visual-only photographic background test)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -143,6 +143,35 @@
       fontFamily: "system-ui", fontSize: "17px", fontStyle: "bold", color: "#e3e7ed",
       backgroundColor: "#0b1424bb", padding: { x: 9, y: 6 }
     }).setDepth(30);
+  }
+
+  // v0.5.9: visual-only photo backdrop. Gameplay and collision are untouched.
+  // Keep the original procedural roof as a fallback if the asset cannot load.
+  function addRooftopPhoto(scene) {
+    const image = new Image();
+    image.onload = () => {
+      if (!scene.sys?.isActive()) return;
+      try {
+        const key = "bs_rooftop_photo_v059";
+        if (!scene.textures.exists(key)) scene.textures.addImage(key, image);
+        scene.add.image(W / 2, H / 2, key)
+          .setDisplaySize(W, H).setDepth(-9);
+        // These understated outlines preserve readability where the new
+        // photographic equipment differs from the existing collision geometry.
+        const guide = scene.add.graphics().setDepth(-8);
+        guide.fillStyle(0x111a25, 0.32);
+        guide.lineStyle(2, 0xb5a5a0, 0.38);
+        for (const o of BS_OBSTACLES) {
+          guide.fillRoundedRect(o.x, o.y, o.w, o.h, 5);
+          guide.strokeRoundedRect(o.x, o.y, o.w, o.h, 5);
+        }
+        console.info("BLACK SERIES rooftop photo test loaded (v0.5.9)");
+      } catch (error) {
+        console.warn("Rooftop photo unavailable; using original background", error);
+      }
+    };
+    image.onerror = () => console.warn("Rooftop image missing: assets/maps/ep001-rooftop-v0.5.9.jpg");
+    image.src = "assets/maps/ep001-rooftop-v0.5.9.jpg?v=059";
   }
 
   function objective() {
@@ -457,6 +486,7 @@
       if (child instanceof Phaser.GameObjects.Graphics) child.setVisible(false);
     }
     drawRoof(scene);
+    addRooftopPhoto(scene);
     for (const actor of Object.values(scene.actors || {})) {
       actor.rect?.setVisible(false); actor.txt?.setVisible(false);
     }
