@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.11 (photo-aligned walkable roof boundary)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.12 (photo-aligned HVAC collision correction)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -540,8 +540,11 @@
     ROOF.members.kingmaker = { id: "kingmaker", sprite: kingSprite, label: { setVisible() {}, setPosition() {} }, dir: "right", path: [], goal: null, repath: 0 };
     setActorAnimation("kingmaker", kingSprite, false, "right");
     BS_OBSTACLES.splice(0, BS_OBSTACLES.length,
-      { x: 360, y: 115, w: 110, h: 75 },
-      { x: 405, y: 355, w: 125, h: 70 },
+      // Rear HVAC: photo x≈420–520, y≈155–210.
+      { x: 417, y: 152, w: 111, h: 63 },
+      // Foreground HVAC: photo x≈425–575, y≈365–445.
+      { x: 425, y: 363, w: 154, h: 83 },
+      // Left foreground equipment.
       { x: 79, y: 300, w: 130, h: 130 });
     x = 27; y = 56; facing = "right";
     scene.heroName = "kingmaker";
