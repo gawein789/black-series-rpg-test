@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.12 (photo-aligned HVAC collision correction)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.13 (cinematic 2D background asset swap; v0.5.12 gameplay locked)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -167,18 +167,18 @@
     image.onload = () => {
       if (!scene.sys?.isActive()) return;
       try {
-        const key = "bs_rooftop_photo_v059";
+        const key = "bs_rooftop_photo_v0513";
         if (!scene.textures.exists(key)) scene.textures.addImage(key, image);
         scene.add.image(W / 2, H / 2, key)
           .setDisplaySize(W, H).setDepth(-9);
         // No collision-guide overlays: keep all original collision data unchanged.
-        console.info("BLACK SERIES rooftop visual polish loaded (v0.5.10)");
+        console.info("BLACK SERIES rooftop visual polish loaded (v0.5.13)");
       } catch (error) {
         console.warn("Rooftop photo unavailable; using original background", error);
       }
     };
-    image.onerror = () => console.warn("Rooftop image missing: assets/maps/ep001-rooftop-v0.5.9.jpg");
-    image.src = "assets/maps/ep001-rooftop-v0.5.9.jpg?v=059";
+    image.onerror = () => console.warn("Rooftop image missing: assets/maps/ep001-rooftop-v0.5.13.jpg");
+    image.src = "assets/maps/ep001-rooftop-v0.5.13.jpg?v=0513";
   }
 
   // Soft contact shadows match the wet rooftop without modifying sprites.
