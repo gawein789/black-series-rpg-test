@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.20 (spawn-safe movement + entrance approach + foreground equipment clearance; no movement diagnostics)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.21 (safe wall collisions + scouting facing + leader rally order)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -8,7 +8,7 @@
   const SPEED = { kingmaker: 125, lucifer: 125, lilith: 125, goliath: 125 }; // follower px/sec
   const SPACING = 54;
   const LEADER_SPEED = { kingmaker: 1.25, lucifer: 1, lilith: 1, goliath: 1 };
-  const RALLY_LIMIT = 4;
+  const RALLY_LIMIT = 7;
   const CREW = [
     { id: "lucifer", x: 260, y: 163 },
     { id: "lilith", x: 653, y: 173 },
@@ -34,6 +34,9 @@
     if (px < 48 || px > 844 || py < 150 || py > 456) return false;
     // Left corrugated utility-room wall: its facade occupies the upper-left.
     if (py < 315 && px < 207) return false;
+    // Wall-mounted outdoor unit beside the illuminated door: block its footprint.
+    // The initial leader position (x=243, y≈283) stays outside this rectangle.
+    if (px >= 170 && px <= 222 && py >= 268 && py <= 336) return false;
     // At the lower left, the near equipment and edge leave a narrow corridor.
     if (py >= 315 && px < 72) return false;
     // Far right railing recedes toward the horizon (conservative clearance).
@@ -416,6 +419,34 @@
     const i = IDS.indexOf(ROOF.scene.heroName);
     return switchTo(IDS[(i + 1) % IDS.length]);
   }
+  function faceDirection(from, to) {
+    const dx = to.x - from.x, dy = to.y - from.y;
+    return Math.abs(dx) >= Math.abs(dy)
+      ? (dx < 0 ? "left" : "right") : (dy < 0 ? "back" : "front");
+  }
+  function faceActor(id, dir) {
+    const actor = ROOF.members[id];
+    if (!actor) return;
+    actor.dir = dir;
+    if (ROOF.scene.heroName === id) {
+      facing = dir;
+      ROOF.scene.currentAnimation = "";
+      ROOF.scene.refreshHero(false);
+    } else {
+      setActorAnimation(id, actor.sprite, false, dir);
+    }
+  }
+  function faceEachOther(id) {
+    const p = { x: W * x / 100, y: H * y / 100 };
+    const other = pointOf(ROOF.members[id].sprite);
+    faceActor(ROOF.scene.heroName, faceDirection(p, other));
+    faceActor(id, faceDirection(other, p));
+  }
+  function beginRally() {
+    ROOF.phase = "rally";
+    ROOF.rallyElapsed = 0;
+    objective();
+  }
   function interactRoof() {
     if (!ROOF.active) return oldInteract?.();
     if (fighting) return;
@@ -429,6 +460,7 @@
       }
       if (closest) {
         const id = closest.id;
+        faceEachOther(id);
         const lines = id === "lucifer" ? [
           { speaker: "ルシファー", text: "事前情報では二十人前後でした。" },
           { speaker: "ルシファー", text: "見えるだけで、それ以上いますね。" },
@@ -443,12 +475,16 @@
         ];
         dialogue(lines, () => {
           ROOF.found[id] = true;
-          if (CREW.every(c => ROOF.found[c.id])) {
-            ROOF.phase = "rally";
-            ROOF.rallyStarted = false;
-            ROOF.rallyElapsed = 0;
-          }
           objective();
+          if (CREW.every(c => ROOF.found[c.id])) {
+            faceActor("kingmaker", "front");
+            dialogue([
+              { speaker: "キングメイカー", text: "……確認は十分だ。全員、集まれ。降りるぞ。" }
+            ], beginRally);
+          } else {
+            // After speaking, resume looking toward the observation area.
+            faceActor(id, id === "goliath" ? "front" : "back");
+          }
         });
         return;
       }
@@ -476,7 +512,10 @@
     const btn = document.getElementById("charTouch");
     if (btn) btn.style.display = "";
     objective();
-    dialogue([{ speaker: "SYSTEM", text: "4人が合流しました。「切替」で操作キャラクターを変更できます。" }]);
+    dialogue([
+      { speaker: "キングメイカー", text: "行くぞ。" },
+      { speaker: "SYSTEM", text: "4人が合流しました。「切替」で操作キャラクターを変更できます。" }
+    ]);
   }
   function tick(time, delta) {
     if (!ROOF.active) return;
@@ -531,7 +570,7 @@
     drawRoof(scene);
     addRooftopPhoto(scene);
     // Distinct build marker: confirms the latest file actually loaded on iPhone.
-    scene.add.text(885, 14, "MAP v0.5.20", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
+    scene.add.text(885, 14, "MAP v0.5.21", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
     if (ROOF.moveDiagnostic?.destroy) ROOF.moveDiagnostic.destroy();
     ROOF.contactShadows = scene.add.graphics().setDepth(8);
     for (const actor of Object.values(scene.actors || {})) {
@@ -550,7 +589,9 @@
       const m = scene.summitMembers[c.id];
       m.sprite.setPosition(c.x, c.y).setVisible(true);
       m.label.setPosition(c.x, c.y + 10).setVisible(true);
-      ROOF.members[c.id] = { id: c.id, sprite: m.sprite, label: m.label, dir: "front", path: [], goal: null, repath: 0 };
+      const watchDir = c.id === "goliath" ? "front" : "back";
+      ROOF.members[c.id] = { id: c.id, sprite: m.sprite, label: m.label, dir: watchDir, path: [], goal: null, repath: 0 };
+      setActorAnimation(c.id, m.sprite, false, watchDir);
     }
     const kingSprite = scene.add.sprite(0, 0, "kingmaker_idle", 0).setVisible(false).setDepth(9);
     ROOF.members.kingmaker = { id: "kingmaker", sprite: kingSprite, label: { setVisible() {}, setPosition() {} }, dir: "right", path: [], goal: null, repath: 0 };
