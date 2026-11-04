@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.13 (cinematic 2D background asset swap; v0.5.12 gameplay locked)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.14 (rear railing player collision fix; v0.5.13 visuals retained)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -46,12 +46,16 @@
       (typeof BSCanStand !== "function" || BSCanStand(px, py));
   }
   // The player and the followers must share exactly the same walkable roof.
+  // Rear railing: the leader must remain on the visible floor.
+  // Crew spawn at y=163/173, so retain canStand() for rally/pathfinding.
+  // Apply this additional boundary only to player-controlled movement.
+  const REAR_PLAYER_LIMIT = 190;
   function guardedTryMove(dx, dy) {
     const beforeX = x, beforeY = y;
     if (typeof originalTryMove !== "function") return false;
     const result = originalTryMove(dx, dy);
     const after = { x: W * x / 100, y: H * y / 100 };
-    if (!canStand(after.x, after.y)) {
+    if (!canStand(after.x, after.y) || after.y < REAR_PLAYER_LIMIT) {
       x = beforeX; y = beforeY;
       return false;
     }
@@ -340,8 +344,8 @@
     }
     const oldPosition = { x: W * x / 100, y: H * y / 100 };
     const requested = pointOf(next.sprite);
-    const nextPosition = canStand(requested.x, requested.y)
-      ? requested : safeNear(requested, oldPosition);
+    const nextPosition = canStand(requested.x, requested.y) && requested.y >= REAR_PLAYER_LIMIT
+      ? requested : safeNear({ x: requested.x, y: Math.max(REAR_PLAYER_LIMIT + 2, requested.y) }, oldPosition);
     if (!nextPosition) {
       switchNotice("切替失敗：移動先が見つかりません");
       return false;
