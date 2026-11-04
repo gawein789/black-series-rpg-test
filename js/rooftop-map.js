@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.14 (rear railing player collision fix; v0.5.13 visuals retained)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.15 (rear railing clearance fine-tuning; v0.5.13 visuals retained)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -49,7 +49,7 @@
   // Rear railing: the leader must remain on the visible floor.
   // Crew spawn at y=163/173, so retain canStand() for rally/pathfinding.
   // Apply this additional boundary only to player-controlled movement.
-  const REAR_PLAYER_LIMIT = 190;
+  const REAR_PLAYER_LIMIT = 176;
   function guardedTryMove(dx, dy) {
     const beforeX = x, beforeY = y;
     if (typeof originalTryMove !== "function") return false;
