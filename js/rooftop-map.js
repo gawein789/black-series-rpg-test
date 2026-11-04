@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.17 (stable release; temporary movement diagnostics removed; v0.5.15 gameplay retained)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.18 (entrance approach + foreground equipment clearance; no movement diagnostics)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -14,7 +14,7 @@
     { id: "lilith", x: 653, y: 173 },
     { id: "goliath", x: 716, y: 376 }
   ];
-  const EXIT = { x: 235, y: 387 };
+  const EXIT = { x: 232, y: 312 }; // reachable approach beside the stairwell; not inside the photo wall
   const ROOF = { active: false, phase: "scout", found: {}, members: {}, trail: [], pending: null, waiting: false, completed: false, scene: null };
   const FOOT = { kingmaker: { idle: 153, walk: 150.5 }, lucifer: { idle: 153, walk: 150.5 }, lilith: { idle: 153, walk: 150.5 }, goliath: { idle: 153, walk: 150.5 } };
   const HEIGHTS = { idle: 149, walk: 138.5 };
@@ -450,7 +450,7 @@
       dialogue([{ speaker: "探索", text: "仲間が集合している。" }]);
       return;
     }
-    if (distance(p, EXIT) < 92) {
+    if (distance(p, EXIT) < 62) {
       dialogue([
         { speaker: "キングメイカー", text: "確認してから入る。" },
         { speaker: "キングメイカー", text: "始めるぞ。" },
@@ -521,6 +521,9 @@
     }
     drawRoof(scene);
     addRooftopPhoto(scene);
+    // Distinct build marker: confirms the latest file actually loaded on iPhone.
+    scene.add.text(885, 14, "MAP v0.5.18", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
+    if (ROOF.moveDiagnostic?.destroy) ROOF.moveDiagnostic.destroy();
     ROOF.contactShadows = scene.add.graphics().setDepth(8);
     for (const actor of Object.values(scene.actors || {})) {
       actor.rect?.setVisible(false); actor.txt?.setVisible(false);
@@ -548,8 +551,9 @@
       { x: 417, y: 152, w: 111, h: 63 },
       // Foreground HVAC: photo x≈425–575, y≈365–445.
       { x: 425, y: 363, w: 154, h: 83 },
-      // Left foreground equipment.
-      { x: 79, y: 300, w: 130, h: 130 });
+      // Left foreground equipment: keep the character feet clear of its right edge.
+      // The visible box begins around y=345; the safe approach to the door is above it.
+      { x: 79, y: 344, w: 151, h: 105 });
     x = 27; y = 56; facing = "right";
     scene.heroName = "kingmaker";
     scene.currentAnimation = "";
@@ -563,7 +567,7 @@
       fontFamily: "system-ui", fontSize: "14px", color: "#f5e5e9",
       backgroundColor: "#0b101bd9", padding: { x: 12, y: 7 }
     }).setOrigin(.5, 0).setDepth(120);
-    scene.bsExitLabel = scene.add.text(EXIT.x, EXIT.y + 45, "▼ 階段入口", {
+    scene.bsExitLabel = scene.add.text(EXIT.x + 16, EXIT.y - 23, "◀ 階段入口", {
       fontFamily: "system-ui", fontSize: "13px", color: "#f5dfb8",
       backgroundColor: "#111b25e6", padding: { x: 6, y: 4 }
     }).setOrigin(.5).setDepth(121).setVisible(false);
