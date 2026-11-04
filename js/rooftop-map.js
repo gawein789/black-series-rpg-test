@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.15 (rear railing clearance fine-tuning; v0.5.13 visuals retained)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.16 (temporary iPhone movement diagnostics; v0.5.15 gameplay retained)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -50,15 +50,48 @@
   // Crew spawn at y=163/173, so retain canStand() for rally/pathfinding.
   // Apply this additional boundary only to player-controlled movement.
   const REAR_PLAYER_LIMIT = 176;
+  // Temporary diagnostic only. All collision and movement decisions remain unchanged.
+  const MOVE_DIAG = { reason: "待機", attempted: null, blocked: 0 };
+  function roofBlockReason(px, py) {
+    if (py < REAR_PLAYER_LIMIT) return "奥の柵 (Y=176)";
+    if (!insideRoofPhoto(px, py)) return "屋上の外周・左壁";
+    if (typeof BSCanStand === "function" && !BSCanStand(px, py)) return "基本当たり判定/設備";
+    return "不明";
+  }
+  function refreshMoveDiagnostic() {
+    if (!ROOF.moveDiagnostic) return;
+    const px = W * x / 100, py = H * y / 100;
+    const a = MOVE_DIAG.attempted;
+    const requested = a ? `  試行(${a.x.toFixed(1)},${a.y.toFixed(1)})` : "";
+    ROOF.moveDiagnostic.setText(
+      `足元 X:${px.toFixed(1)} Y:${py.toFixed(1)}  奥限界:${REAR_PLAYER_LIMIT}\n` +
+      `直近の停止: ${MOVE_DIAG.reason}${requested}`
+    );
+  }
   function guardedTryMove(dx, dy) {
     const beforeX = x, beforeY = y;
-    if (typeof originalTryMove !== "function") return false;
-    const result = originalTryMove(dx, dy);
-    const after = { x: W * x / 100, y: H * y / 100 };
-    if (!canStand(after.x, after.y) || after.y < REAR_PLAYER_LIMIT) {
-      x = beforeX; y = beforeY;
+    if (typeof originalTryMove !== "function") {
+      MOVE_DIAG.reason = "元の移動処理がありません";
+      refreshMoveDiagnostic();
       return false;
     }
+    const result = originalTryMove(dx, dy);
+    const after = { x: W * x / 100, y: H * y / 100 };
+    // Record the attempted position only when our rooftop guard rejects it.
+    if (!canStand(after.x, after.y) || after.y < REAR_PLAYER_LIMIT) {
+      MOVE_DIAG.reason = roofBlockReason(after.x, after.y);
+      MOVE_DIAG.attempted = after;
+      MOVE_DIAG.blocked++;
+      x = beforeX; y = beforeY;
+      refreshMoveDiagnostic();
+      return false;
+    }
+    // The original movement engine may reject a move before reaching our guard.
+    if (x === beforeX && y === beforeY && (dx !== 0 || dy !== 0)) {
+      MOVE_DIAG.reason = "元の移動処理で停止 (詳細未特定)";
+      MOVE_DIAG.attempted = null;
+    }
+    refreshMoveDiagnostic();
     return result === undefined ? (x !== beforeX || y !== beforeY) : result;
   }
   function safeNear(target, origin) {
@@ -574,6 +607,11 @@
     if (testSelect) testSelect.style.display = "none";
     const footer = document.querySelector("#game > p");
     if (footer) footer.style.display = "none";
+    ROOF.moveDiagnostic = scene.add.text(450, 448, "", {
+      fontFamily: "monospace", fontSize: "12px", color: "#fff3d8",
+      backgroundColor: "#171b29ee", padding: { x: 9, y: 6 }
+    }).setOrigin(.5, 0).setDepth(300);
+    refreshMoveDiagnostic();
     window.BSTryMove = guardedTryMove;
     window.BSGetLeaderSpeed = () => LEADER_SPEED[scene.heroName] || 1;
     window.BSGetLeaderName = () => scene.heroName;
