@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.22 (safe wall collisions + scouting facing + leader rally order)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.23 (safe wall collisions + scouting facing + leader rally order)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -32,11 +32,16 @@
   // beyond the distant/right-hand railing visible in the rooftop photograph.
   function insideRoofPhoto(px, py) {
     if (px < 48 || px > 844 || py < 150 || py > 456) return false;
-    // Left corrugated utility-room wall: its facade occupies the upper-left.
-    if (py < 300 && px < 192) return false;
-    // Wall-mounted outdoor unit beside the illuminated door: block its footprint.
-    // The initial leader position (x=243, y≈283) stays outside this rectangle.
-    if (px >= 170 && px <= 205 && py >= 268 && py <= 305) return false;
+    // Photo-aligned left stairwell: the wall continues well below the door.
+    // Foot-point collision, not sprite artwork collision. Keep the corridor
+    // on the right of the wall open, including the stair entrance at x=215.
+    if (py < 352 && px < 205) return false;
+    // Below the wall, its near corner recedes to the left; don't allow the
+    // player to cut diagonally through the visible bottom-left corner.
+    if (py >= 352 && py < 388 && px < 205 - (py - 352) * 2.0) return false;
+    // The door-side condenser is attached to the building; the wall rule
+    // already covers it. Its raised plinth projects slightly onto the roof.
+    if (px >= 205 && px < 225 && py >= 270 && py < 304) return false;
     // At the lower left, the near equipment and edge leave a narrow corridor.
     if (py >= 315 && px < 72) return false;
     // Far right railing recedes toward the horizon (conservative clearance).
@@ -582,7 +587,7 @@
     drawRoof(scene);
     addRooftopPhoto(scene);
     // Distinct build marker: confirms the latest file actually loaded on iPhone.
-    scene.add.text(885, 14, "MAP v0.5.22", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
+    scene.add.text(885, 14, "MAP v0.5.23", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
     if (ROOF.moveDiagnostic?.destroy) ROOF.moveDiagnostic.destroy();
     ROOF.contactShadows = scene.add.graphics().setDepth(8);
     for (const actor of Object.values(scene.actors || {})) {
