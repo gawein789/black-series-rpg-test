@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.21 (safe wall collisions + scouting facing + leader rally order)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.22 (safe wall collisions + scouting facing + leader rally order)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -14,7 +14,7 @@
     { id: "lilith", x: 653, y: 173 },
     { id: "goliath", x: 716, y: 376 }
   ];
-  const EXIT = { x: 232, y: 312 }; // reachable approach beside the stairwell; not inside the photo wall
+  const EXIT = { x: 215, y: 312 }; // reachable approach beside the stairwell; not inside the photo wall
   const ROOF = { active: false, phase: "scout", found: {}, members: {}, trail: [], pending: null, waiting: false, completed: false, scene: null };
   const FOOT = { kingmaker: { idle: 153, walk: 150.5 }, lucifer: { idle: 153, walk: 150.5 }, lilith: { idle: 153, walk: 150.5 }, goliath: { idle: 153, walk: 150.5 } };
   const HEIGHTS = { idle: 149, walk: 138.5 };
@@ -33,10 +33,10 @@
   function insideRoofPhoto(px, py) {
     if (px < 48 || px > 844 || py < 150 || py > 456) return false;
     // Left corrugated utility-room wall: its facade occupies the upper-left.
-    if (py < 315 && px < 207) return false;
+    if (py < 300 && px < 192) return false;
     // Wall-mounted outdoor unit beside the illuminated door: block its footprint.
     // The initial leader position (x=243, y≈283) stays outside this rectangle.
-    if (px >= 170 && px <= 222 && py >= 268 && py <= 336) return false;
+    if (px >= 170 && px <= 205 && py >= 268 && py <= 305) return false;
     // At the lower left, the near equipment and edge leave a narrow corridor.
     if (py >= 315 && px < 72) return false;
     // Far right railing recedes toward the horizon (conservative clearance).
@@ -373,6 +373,7 @@
       facing = next.dir || "front";
       hero.setVisible(true);
       scene.refreshHero(false);
+      updateActorDepths();
 
       // Validate that the actual hero animation changed as requested.
       const expected = `${id}_idle_${facing}`;
@@ -513,12 +514,24 @@
     if (btn) btn.style.display = "";
     objective();
     dialogue([
-      { speaker: "キングメイカー", text: "行くぞ。" },
       { speaker: "SYSTEM", text: "4人が合流しました。「切替」で操作キャラクターを変更できます。" }
     ]);
   }
+  // Consistent front/back ordering for every party member, including the
+  // Phaser-managed leader sprite. Higher feet on screen = rendered in front.
+  function updateActorDepths() {
+    const scene = ROOF.scene;
+    if (!scene) return;
+    for (const id of IDS) {
+      const sprite = id === scene.heroName ? scene.heroSprite : ROOF.members[id]?.sprite;
+      if (!sprite || !sprite.visible) continue;
+      const footY = id === scene.heroName ? H * y / 100 : sprite.y;
+      sprite.setDepth(9 + footY / 1000);
+    }
+  }
   function tick(time, delta) {
     if (!ROOF.active) return;
+    updateActorDepths();
     updateContactShadows();
     if (ROOF.waiting && !BSDialogue.active) {
       ROOF.waiting = false;
@@ -557,7 +570,6 @@
       const gap = distance(pointOf(actor.sprite), target);
       const speed = SPEED[id] * (gap > 240 ? 1.7 : gap > 135 ? 1.4 : gap > 75 ? 1.18 : 1.05);
       moveActor(actor, target, dt, speed);
-      actor.sprite.setDepth(9 + actor.sprite.y / 1000);
     });
   }
   function init(scene) {
@@ -570,7 +582,7 @@
     drawRoof(scene);
     addRooftopPhoto(scene);
     // Distinct build marker: confirms the latest file actually loaded on iPhone.
-    scene.add.text(885, 14, "MAP v0.5.21", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
+    scene.add.text(885, 14, "MAP v0.5.22", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
     if (ROOF.moveDiagnostic?.destroy) ROOF.moveDiagnostic.destroy();
     ROOF.contactShadows = scene.add.graphics().setDepth(8);
     for (const actor of Object.values(scene.actors || {})) {
@@ -610,6 +622,7 @@
     scene.isMoving = false;
     if (typeof place === "function") place();
     scene.refreshHero(false);
+    updateActorDepths();
     // Match the initial HUD label to the official Japanese character name.
     const initialHud = document.getElementById("hudName");
     if (initialHud) initialHud.textContent = NAMES[scene.heroName];
