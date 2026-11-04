@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.19 (photo collision alignment + railing slide)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.20 (spawn-safe movement + entrance approach + foreground equipment clearance; no movement diagnostics)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -14,7 +14,7 @@
     { id: "lilith", x: 653, y: 173 },
     { id: "goliath", x: 716, y: 376 }
   ];
-  const EXIT = { x: 244, y: 263 }; // interaction point on accessible roof, beside the visible stairwell door
+  const EXIT = { x: 232, y: 312 }; // reachable approach beside the stairwell; not inside the photo wall
   const ROOF = { active: false, phase: "scout", found: {}, members: {}, trail: [], pending: null, waiting: false, completed: false, scene: null };
   const FOOT = { kingmaker: { idle: 153, walk: 150.5 }, lucifer: { idle: 153, walk: 150.5 }, lilith: { idle: 153, walk: 150.5 }, goliath: { idle: 153, walk: 150.5 } };
   const HEIGHTS = { idle: 149, walk: 138.5 };
@@ -33,7 +33,7 @@
   function insideRoofPhoto(px, py) {
     if (px < 48 || px > 844 || py < 150 || py > 456) return false;
     // Left corrugated utility-room wall: its facade occupies the upper-left.
-    if (py < 348 && px < 207) return false;
+    if (py < 315 && px < 207) return false;
     // At the lower left, the near equipment and edge leave a narrow corridor.
     if (py >= 315 && px < 72) return false;
     // Far right railing recedes toward the horizon (conservative clearance).
@@ -53,18 +53,15 @@
   function guardedTryMove(dx, dy) {
     if (typeof originalTryMove !== "function") return false;
     const startX = x, startY = y;
-    const valid = () => {
-      const px = W * x / 100, py = H * y / 100;
-      return canStand(px, py) && py >= REAR_PLAYER_LIMIT;
-    };
-    // Try normal movement first. If the diagonal step collides with a railing,
-    // retry along each axis separately so the character can slide along it.
-    // No direct position teleport: all steps still pass through originalTryMove.
     const attempt = (mx, my) => {
       const bx = x, by = y;
-      originalTryMove(mx, my);
-      if (!valid()) { x = bx; y = by; return false; }
-      return x !== bx || y !== by;
+      const result = originalTryMove(mx, my);
+      const px = W * x / 100, py = H * y / 100;
+      if (!canStand(px, py) || py < REAR_PLAYER_LIMIT) {
+        x = bx; y = by;
+        return false;
+      }
+      return result === undefined ? (x !== bx || y !== by) : (x !== bx || y !== by);
     };
     if (attempt(dx, dy)) return true;
     x = startX; y = startY;
@@ -462,7 +459,7 @@
       dialogue([{ speaker: "探索", text: "仲間が集合している。" }]);
       return;
     }
-    if (distance(p, EXIT) < 75) {
+    if (distance(p, EXIT) < 62) {
       dialogue([
         { speaker: "キングメイカー", text: "確認してから入る。" },
         { speaker: "キングメイカー", text: "始めるぞ。" },
@@ -534,7 +531,7 @@
     drawRoof(scene);
     addRooftopPhoto(scene);
     // Distinct build marker: confirms the latest file actually loaded on iPhone.
-    scene.add.text(885, 14, "MAP v0.5.19", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
+    scene.add.text(885, 14, "MAP v0.5.20", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
     if (ROOF.moveDiagnostic?.destroy) ROOF.moveDiagnostic.destroy();
     ROOF.contactShadows = scene.add.graphics().setDepth(8);
     for (const actor of Object.values(scene.actors || {})) {
@@ -563,10 +560,9 @@
       { x: 417, y: 152, w: 111, h: 63 },
       // Foreground HVAC: photo x≈425–575, y≈365–445.
       { x: 425, y: 363, w: 154, h: 83 },
-      // Small air conditioner beside the door, aligned to its visible base.
-      { x: 169, y: 211, w: 78, h: 83 },
-      // Large foreground unit: slightly expanded to protect its right edge.
-      { x: 79, y: 344, w: 165, h: 105 });
+      // Left foreground equipment: keep the character feet clear of its right edge.
+      // The visible box begins around y=345; the safe approach to the door is above it.
+      { x: 79, y: 344, w: 151, h: 105 });
     x = 27; y = 56; facing = "right";
     scene.heroName = "kingmaker";
     scene.currentAnimation = "";
