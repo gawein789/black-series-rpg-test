@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.27 (safe wall collisions + scouting facing + leader rally order)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.28 (safe wall collisions + scouting facing + leader rally order)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -57,6 +57,7 @@
   // Apply this additional boundary only to player-controlled movement.
   const REAR_PLAYER_LIMIT = 176;
   function guardedTryMove(dx, dy) {
+    if (ROOF.phase === "interior") return false;
     if (typeof originalTryMove !== "function") return false;
     const startX = x, startY = y;
     const attempt = (mx, my) => {
@@ -451,8 +452,53 @@
     ROOF.rallyElapsed = 0;
     objective();
   }
+  // Temporary stairwell destination until its official map artwork is supplied.
+  // This deliberately does not claim the next playable map is implemented.
+  function enterStairwell() {
+    if (ROOF.phase !== "party") return;
+    ROOF.phase = "interior";
+    ROOF.completed = true;
+    const existing = document.getElementById("bs-stairwell-preview");
+    if (existing) existing.remove();
+    const overlay = document.createElement("div");
+    overlay.id = "bs-stairwell-preview";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-label", "階段入口");
+    Object.assign(overlay.style, {
+      position: "fixed", inset: "0", zIndex: "99999", display: "flex",
+      flexDirection: "column", alignItems: "center", justifyContent: "center",
+      gap: "18px", padding: "24px", boxSizing: "border-box",
+      background: "linear-gradient(180deg, #070b13 0%, #17202a 62%, #080a10 100%)",
+      color: "#f0e5e7", fontFamily: "system-ui, sans-serif", textAlign: "center"
+    });
+    const heading = document.createElement("h2");
+    heading.textContent = "東湾第七码頭物流倉庫 — 階段入口";
+    Object.assign(heading.style, { fontSize: "clamp(18px, 3vw, 28px)", margin: "0" });
+    const description = document.createElement("p");
+    description.textContent = "4人は屋上の偵察を終え、階段へ向かった。";
+    Object.assign(description.style, { fontSize: "clamp(13px, 2vw, 17px)", margin: "0", lineHeight: "1.8" });
+    const note = document.createElement("p");
+    note.textContent = "※屋内マップは制作準備中です。現在は階段入口イベントの動作確認画面です。";
+    Object.assign(note.style, { fontSize: "12px", opacity: "0.7", margin: "0" });
+    const back = document.createElement("button");
+    back.type = "button";
+    back.textContent = "屋上へ戻る";
+    Object.assign(back.style, {
+      border: "1px solid #b17b90", borderRadius: "8px", padding: "12px 26px",
+      color: "#fff", background: "#492c3d", fontSize: "16px", cursor: "pointer"
+    });
+    back.addEventListener("click", () => {
+      overlay.remove();
+      ROOF.phase = "party";
+      objective();
+    });
+    overlay.append(heading, description, note, back);
+    document.body.appendChild(overlay);
+  }
+
   function interactRoof() {
     if (!ROOF.active) return oldInteract?.();
+    if (ROOF.phase === "interior") return;
     if (fighting) return;
     if (BSDialogue.active) { BSAdvanceDialogue(); return; }
     const p = { x: W * x / 100, y: H * y / 100 };
@@ -501,10 +547,9 @@
     }
     if (distance(p, EXIT) < 62) {
       dialogue([
-        { speaker: "キングメイカー", text: "確認してから入る。" },
-        { speaker: "キングメイカー", text: "始めるぞ。" },
-        { speaker: "SYSTEM", text: "屋上偵察完了。次の倉庫潜入マップは今後実装予定です。" }
-      ]);
+        { speaker: "キングメイカー", text: "全員、準備はいいな。階段から入る。" },
+        { speaker: "ルシファー", text: "了解しました。" }
+      ], enterStairwell);
       return;
     }
     dialogue([{ speaker: "探索", text: "雨に濡れた屋上から、港の灯りが見える。" }]);
@@ -585,7 +630,7 @@
     drawRoof(scene);
     addRooftopPhoto(scene);
     // Distinct build marker: confirms the latest file actually loaded on iPhone.
-    scene.add.text(885, 14, "MAP v0.5.27", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
+    scene.add.text(885, 14, "MAP v0.5.28", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
     if (ROOF.moveDiagnostic?.destroy) ROOF.moveDiagnostic.destroy();
     ROOF.contactShadows = scene.add.graphics().setDepth(8);
     for (const actor of Object.values(scene.actors || {})) {
