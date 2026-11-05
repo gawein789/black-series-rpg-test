@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.26 (safe wall collisions + scouting facing + leader rally order)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.27 (safe wall collisions + scouting facing + leader rally order)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -38,8 +38,9 @@
     const wallEdge = py < 264 ? 205 : py < 327 ? 205 - (py - 264) * 1.12 : py < 375 ? 134.5 - (py - 327) * 1.57 : 59;
     if (px < wallEdge) return false;
     // Door-side unit: physical footprint only, not the tall visual silhouette.
-    // A small buffer prevents feet from standing on the condenser plinth.
-    if (px >= 164 && px <= 215 && py >= 266 && py <= 316) return false;
+    // Block the entire visible small condenser, including its upper half.
+    // Keep the initial spawn (x=243,y≈283) outside this footprint.
+    if (px >= 160 && px <= 225 && py >= 205 && py <= 315) return false;
     // Foreground equipment and roof edges.
     if (py >= 315 && px < 72) return false;
     const rightLimit = py < 230 ? 765 : py < 315 ? 765 + (py - 230) * .72 : 826;
@@ -584,7 +585,7 @@
     drawRoof(scene);
     addRooftopPhoto(scene);
     // Distinct build marker: confirms the latest file actually loaded on iPhone.
-    scene.add.text(885, 14, "MAP v0.5.26", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
+    scene.add.text(885, 14, "MAP v0.5.27", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
     if (ROOF.moveDiagnostic?.destroy) ROOF.moveDiagnostic.destroy();
     ROOF.contactShadows = scene.add.graphics().setDepth(8);
     for (const actor of Object.values(scene.actors || {})) {
