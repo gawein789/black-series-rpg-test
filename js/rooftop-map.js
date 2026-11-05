@@ -1,13 +1,17 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.28 (safe wall collisions + scouting facing + leader rally order)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.29 (safe wall collisions + scouting facing + leader rally order)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
   const IDS = ["kingmaker", "lucifer", "lilith", "goliath"];
   const NAMES = { kingmaker: "キングメイカー", lucifer: "ルシファー", lilith: "リリス", goliath: "ゴライアス" };
-  const SPEED = { kingmaker: 125, lucifer: 125, lilith: 125, goliath: 125 }; // follower px/sec
+  // Fictional walking-speed rankings (not player movement speed).
+  // All controlled characters use the same input speed; followers use a ratio.
+  const NATIVE_PACE = { kingmaker: 100, lucifer: 105, lilith: 90, goliath: 115, leviathan: 70 };
+  const FOLLOW_BASE_SPEED = 125; // px/sec at 100% relative pace
+  const SPEED = { kingmaker: 125, lucifer: 125, lilith: 125, goliath: 125 }; // rally only
   const SPACING = 54;
-  const LEADER_SPEED = { kingmaker: 1.25, lucifer: 1, lilith: 1, goliath: 1 };
+  const LEADER_SPEED = { kingmaker: 1, lucifer: 1, lilith: 1, goliath: 1 };
   const RALLY_LIMIT = 7;
   const CREW = [
     { id: "lucifer", x: 260, y: 163 },
@@ -56,6 +60,18 @@
   // Crew spawn at y=163/173, so retain canStand() for rally/pathfinding.
   // Apply this additional boundary only to player-controlled movement.
   const REAR_PLAYER_LIMIT = 176;
+  // Scouting crew are solid only while stationed. Followers are never solid.
+  // Foot-centered circles avoid blocking dialogue or overlapping large sprites.
+  const STATIONARY_NPC_RADIUS = 21;
+  const PLAYER_FOOT_RADIUS = 10;
+  function blocksStationaryCrew(px, py) {
+    if (ROOF.phase !== "scout") return false;
+    return CREW.some(c => {
+      const actor = ROOF.members[c.id];
+      const at = actor?.sprite ? pointOf(actor.sprite) : c;
+      return Math.hypot(px - at.x, py - at.y) < STATIONARY_NPC_RADIUS + PLAYER_FOOT_RADIUS;
+    });
+  }
   function guardedTryMove(dx, dy) {
     if (ROOF.phase === "interior") return false;
     if (typeof originalTryMove !== "function") return false;
@@ -64,7 +80,7 @@
       const bx = x, by = y;
       const result = originalTryMove(mx, my);
       const px = W * x / 100, py = H * y / 100;
-      if (!canStand(px, py) || py < REAR_PLAYER_LIMIT) {
+      if (!canStand(px, py) || py < REAR_PLAYER_LIMIT || blocksStationaryCrew(px, py)) {
         x = bx; y = by;
         return false;
       }
@@ -616,8 +632,16 @@
       const lateral = index === 0 ? -18 : index === 1 ? 18 : 0;
       const target = safeNear({ x: anchor.x + lateral, y: anchor.y }, pointOf(actor.sprite)) || anchor;
       const gap = distance(pointOf(actor.sprite), target);
-      const speed = SPEED[id] * (gap > 240 ? 1.7 : gap > 135 ? 1.4 : gap > 75 ? 1.18 : 1.05);
-      moveActor(actor, target, dt, speed);
+      // Relative pace: KINGMAKER leading -> LILITH trails; LUCIFER leading
+      // -> KINGMAKER trails; LEVIATHAN leading -> everyone can keep up.
+      const leaderPace = NATIVE_PACE[scene.heroName] || 100;
+      const followerPace = NATIVE_PACE[id] || 100;
+      const relativeSpeed = FOLLOW_BASE_SPEED * followerPace / leaderPace;
+      // Small gap-based assistance preserves personality. Emergency catch-up
+      // activates only at a substantial distance and never changes the canon pace.
+      const assist = gap > 300 ? Math.max(1, 1.13 * leaderPace / followerPace)
+                   : gap > 200 ? 1.12 : 1;
+      moveActor(actor, target, dt, relativeSpeed * assist);
     });
   }
   function init(scene) {
@@ -630,7 +654,7 @@
     drawRoof(scene);
     addRooftopPhoto(scene);
     // Distinct build marker: confirms the latest file actually loaded on iPhone.
-    scene.add.text(885, 14, "MAP v0.5.28", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
+    scene.add.text(885, 14, "MAP v0.5.29", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
     if (ROOF.moveDiagnostic?.destroy) ROOF.moveDiagnostic.destroy();
     ROOF.contactShadows = scene.add.graphics().setDepth(8);
     for (const actor of Object.values(scene.actors || {})) {
