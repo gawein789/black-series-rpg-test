@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.25 (safe wall collisions + scouting facing + leader rally order)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.26 (safe wall collisions + scouting facing + leader rally order)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -14,7 +14,7 @@
     { id: "lilith", x: 653, y: 173 },
     { id: "goliath", x: 716, y: 376 }
   ];
-  const EXIT = { x: 145, y: 321 }; // narrow clear floor beside the stairwell door
+  const EXIT = { x: 207, y: 318 }; // accessible door-side approach, outside the building wall
   const ROOF = { active: false, phase: "scout", found: {}, members: {}, trail: [], pending: null, waiting: false, completed: false, scene: null };
   const FOOT = { kingmaker: { idle: 153, walk: 150.5 }, lucifer: { idle: 153, walk: 150.5 }, lilith: { idle: 153, walk: 150.5 }, goliath: { idle: 153, walk: 150.5 } };
   const HEIGHTS = { idle: 149, walk: 138.5 };
@@ -39,7 +39,7 @@
     if (px < wallEdge) return false;
     // Door-side unit: physical footprint only, not the tall visual silhouette.
     // A small buffer prevents feet from standing on the condenser plinth.
-    if (px >= 164 && px <= 247 && py >= 266 && py <= 336) return false;
+    if (px >= 164 && px <= 215 && py >= 266 && py <= 316) return false;
     // Foreground equipment and roof edges.
     if (py >= 315 && px < 72) return false;
     const rightLimit = py < 230 ? 765 : py < 315 ? 765 + (py - 230) * .72 : 826;
@@ -584,7 +584,7 @@
     drawRoof(scene);
     addRooftopPhoto(scene);
     // Distinct build marker: confirms the latest file actually loaded on iPhone.
-    scene.add.text(885, 14, "MAP v0.5.25", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
+    scene.add.text(885, 14, "MAP v0.5.26", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
     if (ROOF.moveDiagnostic?.destroy) ROOF.moveDiagnostic.destroy();
     ROOF.contactShadows = scene.add.graphics().setDepth(8);
     for (const actor of Object.values(scene.actors || {})) {
