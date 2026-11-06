@@ -1,5 +1,5 @@
 "use strict";
-// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.29 (safe wall collisions + scouting facing + leader rally order)
+// BLACK SERIES RPG — EP001 Rooftop Party Prototype v0.5.30 (safe wall collisions + scouting facing + leader rally order)
 // Load AFTER mobile-ui.js. Requires phaser-scene.js with window.BSPhaserGame.
 (function () {
   const W = 900, H = 506;
@@ -319,13 +319,13 @@
       actor.repath = 0;
       actor.path = [];
     }
-    // Retain the successful v0.5.6 recovery for genuinely stuck followers.
+    // No teleport recovery: followers must travel through walkable space.
+    // When stuck, request a new path next frame without changing position.
     if (actor.stuck > 1.2 && gap > 90) {
-      const recovery = safeNear({ x: target.x - 28, y: target.y + 22 }, start);
-      if (recovery && clearPath(target, recovery)) {
-        sprite.setPosition(recovery.x, recovery.y);
-        actor.path = []; actor.stuck = 0; actor.repath = 0; actor.speed = 0;
-      }
+      actor.path = [];
+      actor.repath = 0;
+      actor.speed = 0;
+      actor.stuck = 0;
     }
     actor.animHold = moved ? .20 : Math.max(0, (actor.animHold || 0) - dt);
     setActorAnimation(actor.id, sprite, moved || actor.animHold > 0, actor.dir);
@@ -654,7 +654,7 @@
     drawRoof(scene);
     addRooftopPhoto(scene);
     // Distinct build marker: confirms the latest file actually loaded on iPhone.
-    scene.add.text(885, 14, "MAP v0.5.29", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
+    scene.add.text(885, 14, "MAP v0.5.30", { fontFamily: "system-ui", fontSize: "11px", color: "#c4b5bf", backgroundColor: "#0b1424bb", padding: { x: 5, y: 3 } }).setOrigin(1, 0).setDepth(130);
     if (ROOF.moveDiagnostic?.destroy) ROOF.moveDiagnostic.destroy();
     ROOF.contactShadows = scene.add.graphics().setDepth(8);
     for (const actor of Object.values(scene.actors || {})) {
@@ -685,9 +685,9 @@
       { x: 417, y: 152, w: 111, h: 63 },
       // Foreground HVAC: photo x≈425–575, y≈365–445.
       { x: 425, y: 363, w: 154, h: 83 },
-      // Left foreground equipment: keep the character feet clear of its right edge.
-      // The visible box begins around y=345; the safe approach to the door is above it.
-      { x: 79, y: 344, w: 151, h: 105 });
+      // Left foreground equipment: block the full footprint, including its
+      // left-facing side. Keep the doorway approach (around 207,318) open.
+      { x: 48, y: 344, w: 182, h: 105 });
     x = 27; y = 56; facing = "right";
     scene.heroName = "kingmaker";
     scene.currentAnimation = "";
